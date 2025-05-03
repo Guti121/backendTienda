@@ -1,0 +1,183 @@
+@shared_task
+def generar_reporte_ventas_dia_update(fecha=None):
+    print("Generando reporte de ventas del día...")
+
+    hoy = fecha or timezone.now().date()
+
+    inicio_del_dia = datetime.combine(hoy, datetime.min.time(), tzinfo=timezone.get_current_timezone())
+    fin_del_dia = datetime.combine(hoy, datetime.max.time(), tzinfo=timezone.get_current_timezone())
+
+    ventas_hoy = FacturaDetalle.objects.filter(creado_en__range=(inicio_del_dia, fin_del_dia))
+    facturas_hoy = ventas_hoy.values('factura').distinct().count()
+
+    agregados = ventas_hoy.aggregate(
+        productos_vendidos=Sum('cantidad'),
+        total_valor_mayor_und=Sum('valor_mayor_und'),
+        total_valor_con_CF=Sum('valor_con_CF'),
+        total_subtotal=Sum('subtotal'),
+    )
+
+    reporte = {
+        key: value or 0 for key, value in agregados.items()
+    }
+
+    reporte_existente = ReporteVentasDiario.objects.filter(fecha=hoy).first()
+
+    if reporte_existente:
+        print(f"Actualizando reporte para el día {hoy}...")
+        reporte_existente.productos_vendidos = reporte['productos_vendidos']
+        reporte_existente.total_valor_mayor_und = reporte['total_valor_mayor_und']
+        reporte_existente.total_valor_con_CF = reporte['total_valor_con_CF']
+        reporte_existente.total_subtotal = reporte['total_subtotal']
+        reporte_existente.facturas_total = facturas_hoy
+        reporte_existente.save()
+
+        # Llamamos a la tarea mensual con kwargs
+        generar_reporte_ventas_mes_update.apply_async(kwargs={'fecha': hoy})
+    else:
+        print("No se modifico ningun reporte")
+
+
+
+@shared_task
+def generar_reporte_ventas_mes_update(fecha=None):
+    print("Actualizando reporte de ventas mensual...")
+
+    hoy = fecha or timezone.now().date()
+
+    # Rango del mes actual
+    primer_dia_mes = hoy.replace(day=1)
+    proximo_mes = (primer_dia_mes + timedelta(days=32)).replace(day=1)
+    ultimo_dia_mes = proximo_mes - timedelta(days=1)
+
+    # Obtenemos reportes diarios del mes
+    reportes_diarios = ReporteVentasDiario.objects.filter(fecha__range=[primer_dia_mes, ultimo_dia_mes])
+
+    # Sumar valores
+    agregados = reportes_diarios.aggregate(
+        productos_vendidos=Sum('productos_vendidos'),
+        total_valor_mayor_und=Sum('total_valor_mayor_und'),
+        total_valor_con_CF=Sum('total_valor_con_CF'),
+        total_subtotal=Sum('total_subtotal'),
+        facturas_total=Sum('facturas_total'),
+    )
+
+    reporte = {key: value or 0 for key, value in agregados.items()}
+
+    reporte_existente = ReporteVentasMensual.objects.filter(fecha=primer_dia_mes).first()
+
+    if reporte_existente:
+        print(f"Actualizando reporte mensual para {primer_dia_mes.strftime('%B %Y')}...")
+        reporte_existente.productos_vendidos = reporte['productos_vendidos']
+        reporte_existente.total_valor_mayor_und = reporte['total_valor_mayor_und']
+        reporte_existente.total_valor_con_CF = reporte['total_valor_con_CF']
+        reporte_existente.total_subtotal = reporte['total_subtotal']
+        reporte_existente.facturas_total = reporte['facturas_total']
+        reporte_existente.save()
+        print("Reporte mensual actualizado correctamente.")
+    else:
+        # Si no existe un reporte, lo creamos
+        print(f"Reporte mensual aun no realizado, debemos esperar la fecha de reporte...")
+        
+
+@shared_task
+def generar_reporte_ventas_dia(fecha=None):
+    print("Generando reporte de ventas del día...")
+    
+    # Si no se pasa una fecha, usamos la fecha actual
+    if not fecha:
+        hoy = timezone.now().date()
+    else:
+        hoy = fecha  # Usamos la fecha proporcionada
+    
+    # Definimos el inicio y fin del día para la fecha proporcionada
+    inicio_del_dia = datetime.combine(hoy, datetime.min.time(), tzinfo=timezone.get_current_timezone())
+    fin_del_dia = datetime.combine(hoy, datetime.max.time(), tzinfo=timezone.get_current_timezone())
+
+    # Obtenemos todas las ventas del día
+    ventas_hoy = FacturaDetalle.objects.filter(creado_en__range=(inicio_del_dia, fin_del_dia))
+    facturas_hoy = ventas_hoy.values('factura').distinct().count()
+
+    # Calculamos los totales
+    reporte = ventas_hoy.aggregate(
+        productos_vendidos=Sum('cantidad') or 0,
+        total_valor_mayor_und=Sum('valor_mayor_und') or 0,
+        total_valor_con_CF=Sum('valor_con_CF') or 0,
+        total_subtotal=Sum('subtotal') or 0,
+    )
+
+    # Verificar si ya existe un reporte para el día
+    reporte_existente = ReporteVentasDiario.objects.filter(fecha=hoy).first()
+
+    if reporte_existente:
+        # Si el reporte ya existe, actualizamos los valores
+        print(f"Actualizando reporte para el día {hoy}...")
+        reporte_existente.productos_vendidos = reporte['productos_vendidos'] or 0
+        reporte_existente.total_valor_mayor_und = reporte['total_valor_mayor_und'] or 0
+        reporte_existente.total_valor_con_CF = reporte['total_valor_con_CF'] or 0
+        reporte_existente.total_subtotal = reporte['total_subtotal'] or 0
+        reporte_existente.facturas_total = facturas_hoy
+        reporte_existente.save()
+    else:
+        # Si no existe un reporte, creamos uno nuevo
+        print(f"Creando reporte para el día {hoy}...")
+        ReporteVentasDiario.objects.create(
+            fecha=hoy,
+            productos_vendidos=reporte['productos_vendidos'] or 0,
+            total_valor_mayor_und=reporte['total_valor_mayor_und'] or 0,
+            total_valor_con_CF=reporte['total_valor_con_CF'] or 0,
+            total_subtotal=reporte['total_subtotal'] or 0,
+            facturas_total=facturas_hoy
+        )
+
+    print(f"Reporte para el día {hoy} {'actualizado' if reporte_existente else 'creado'} correctamente.")
+
+
+#Generador de reportes mensuales , suma todos lo reportes diarios del mes y genera un reporte mensual , llamado desde celery.py cada fin de mes 
+@shared_task
+def generar_reporte_ventas_mes():
+    print("Generando reporte de ventas mensual...")
+
+    # Obtenemos el mes actual
+    hoy = timezone.now().date()
+    primer_dia_mes = hoy.replace(day=1)
+    ultimo_dia_mes = hoy.replace(day=1) + timezone.timedelta(days=32)
+    ultimo_dia_mes = ultimo_dia_mes.replace(day=1) - timezone.timedelta(days=1)
+
+    # Obtenemos los reportes diarios del mes
+    reportes_diarios = ReporteVentasDiario.objects.filter(fecha__range=[primer_dia_mes, ultimo_dia_mes])
+
+    # Sumar los valores de los reportes diarios
+    reporte = reportes_diarios.aggregate(
+        productos_vendidos=Sum('productos_vendidos') or 0,
+        total_valor_mayor_und=Sum('total_valor_mayor_und') or 0,
+        total_valor_con_CF=Sum('total_valor_con_CF') or 0,
+        total_subtotal=Sum('total_subtotal') or 0,
+        facturas_total=Sum('facturas_total') or 0,
+    )
+
+    # Verificamos si ya existe un reporte mensual para ese mes
+    reporte_existente = ReporteVentasMensual.objects.filter(fecha=primer_dia_mes).first()
+
+    if reporte_existente:
+        # Si el reporte ya existe, lo actualizamos
+        print(f"Actualizando reporte mensual para el mes de {primer_dia_mes.strftime('%B %Y')}...")
+        reporte_existente.productos_vendidos = reporte['productos_vendidos'] or 0
+        reporte_existente.total_valor_mayor_und = reporte['total_valor_mayor_und'] or 0
+        reporte_existente.total_valor_con_CF = reporte['total_valor_con_CF'] or 0
+        reporte_existente.total_subtotal = reporte['total_subtotal'] or 0
+        reporte_existente.facturas_total = reporte['facturas_total'] or 0
+        reporte_existente.save()
+    else:
+        # Si no existe un reporte, lo creamos
+        print(f"Creando reporte mensual para el mes de {primer_dia_mes.strftime('%B %Y')}...")
+        ReporteVentasMensual.objects.create(
+            fecha=primer_dia_mes,
+            productos_vendidos=reporte['productos_vendidos'] or 0,
+            total_valor_mayor_und=reporte['total_valor_mayor_und'] or 0,
+            total_valor_con_CF=reporte['total_valor_con_CF'] or 0,
+            total_subtotal=reporte['total_subtotal'] or 0,
+            facturas_total=reporte['facturas_total'] or 0
+        )
+
+    print(f"Reporte mensual para el mes de {primer_dia_mes.strftime('%B %Y')} {'actualizado' if reporte_existente else 'creado'} correctamente.")

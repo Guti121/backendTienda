@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.log
+
+# Virtual environments
+env/
+venv/
+ENV/
+.env/
+.env
+
+
+# Developmen 
+celerybeat_schedule
+8000
+/Tienda_Virtual/settings/local.py
+# Django stuff
+*.pot
+*.pyc
+db.sqlite3
+media/
+staticfiles/
+
+# VS Code
+.vscode/
+.vscode
+# MacOS/Linux/Windows OS clutter
+.DS_Store
+Thumbs.db
