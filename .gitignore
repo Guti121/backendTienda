@@ -12,7 +12,7 @@ ENV/
 
 
 # Developmen 
-celerybeat_schedule
+celerybeat-schedule
 8000
 /Tienda_Virtual/settings/local.py
 # Django stuff
