@@ -2,7 +2,7 @@ import os
 from celery import Celery
 
 # Aquí configuras el DJANGO_SETTINGS_MODULE para tu proyecto  
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Tienda_Virtual.settings.local')
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'Tienda_Virtual.settings.production')
 
 # Crea la instancia de Celery 
 app = Celery('Tienda_Virtual')

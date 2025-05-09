@@ -2,20 +2,20 @@
 from datetime import timedelta
 from pathlib import Path
 import os
-
+from dotenv import load_dotenv
 
 
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
-
+load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 
 
 
@@ -63,7 +63,7 @@ LOCAL_APPS=[
 #Aplicaciones de terceros "librerias externas"
 THIRD_APPS=[
     "corsheaders",
-    "rest_framework",
+    'storages',"rest_framework",
     'rest_framework_simplejwt',
     'rest_framework_simplejwt.token_blacklist', 
     
@@ -130,6 +130,7 @@ AUTH_PASSWORD_VALIDATORS = [
 # Internationalization
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
+
 LANGUAGE_CODE = 'en-us'
 
 TIME_ZONE = 'UTC'
@@ -138,8 +139,19 @@ USE_I18N = True
 
 USE_TZ = True
 
-MEDIA_URL = os.getenv('DJANGO_MEDIA_URL','/media')
-MEDIA_ROOT = os.getenv('DJANGO_MEDIA_ROOT',os.path.join(BASE_DIR, 'media/'))
+# URL base para acceder a los archivos de medios
+MEDIA_URL = f'https://s3.amazonaws.com/'
+
+# No es necesario configurar un directorio local con S3
+MEDIA_ROOT = None  
+
+# Configuración de S3
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')  # Lo tomas de tu archivo .env
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')  # Lo tomas de tu archivo .env
+AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')  # Lo tomas de tu archivo .env
+AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', 'us-east-1')  # Cambia por tu región
+AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'	
+
 
 CORS_ALLOW_CREDENTIALS = True
 
