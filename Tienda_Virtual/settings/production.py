@@ -38,4 +38,9 @@ DATABASES = {
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
-STATIC_URL = 'static/'
+# Ruta para servir archivos estáticos en desarrollo y producción
+STATIC_URL = '/static/'
+
+# Ruta absoluta donde se recogerán los archivos estáticos al hacer collectstatic
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
