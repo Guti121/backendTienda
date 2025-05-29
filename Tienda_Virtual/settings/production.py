@@ -1,25 +1,22 @@
 from .base  import *
 import os
 from pathlib import Path
+from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
-load_dotenv(os.path.join(BASE_DIR, '.env'))
+load_dotenv(BASE_DIR/ '.env')
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv("DJANGO_DEBUG","False")=="True"
 
-ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS','').split(',')
+ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS').split(',')
 
-CORS_ALLOWED_ORIGINS =os.environ.get('DJANGO_CORS_ALLOWED_ORIGINS','').split(',')
+CORS_ALLOWED_ORIGINS =os.getenv('DJANGO_CORS_ALLOWED_ORIGINS').split(',')
 
 
 # Database
-from dotenv import load_dotenv
-
-load_dotenv()
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
@@ -44,3 +41,23 @@ STATIC_URL = '/static/'
 # Ruta absoluta donde se recogerán los archivos estáticos al hacer collectstatic
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
+#config https 
+# settings.py
+
+SECURE_SSL_REDIRECT = True
+SECURE_BROWSER_XSS_FILTER = True
+
+# Activa HSTS y establece un tiempo de expiración
+SECURE_HSTS_SECONDS = 31536000  # 1 año en segundos
+SECURE_HSTS_INCLUDE_SUBDOMAINS = True  # Asegura que todos los subdominios también usen HTTPS
+SECURE_HSTS_PRELOAD = True  # Indica que tu dominio puede ser pre-cargado por los navegadores (opcional)
+
+
+# settings.py
+
+# Evitar que los navegadores muestren contenido mixto (HTTPS + HTTP)
+SECURE_CONTENT_TYPE_NOSNIFF = True
+
+# Forzar el uso de cookies seguras
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
