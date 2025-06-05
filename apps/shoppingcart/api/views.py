@@ -269,9 +269,7 @@ class FacturaDestroyView(DestroyAPIView):
                     producto.save()
                 except Exception as e:
                     print(f"Error al actualizar producto {producto.id}: {str(e)}")
-            else:
-                print(f"Producto no encontrado en detalle: {detalle.id}")
-
+    
         instance.delete()
 
     def delete(self, request, *args, **kwargs):

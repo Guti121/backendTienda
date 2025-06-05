@@ -61,3 +61,12 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 # Forzar el uso de cookies seguras
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
+
+
+# Configuración de Celery
+CELERY_BROKER_URL = 'redis://localhost:6379/0'   # Usamos Redis como broker
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'  # También Redis para almacenar resultados
+CELERY_TIMEZONE = 'America/Bogota'  # O la zona horaria que estés usando
+
