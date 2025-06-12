@@ -12,7 +12,7 @@ class ProductModelSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         # Validación de campos requeridos
-        required_fields = ['nombre', 'tipo_producto', 'color', 'valor', 'valor_mayor', 'unidades_disponibles']
+        required_fields = ['nombre', 'tipo_producto', 'detalles', 'valor', 'valor_mayor', 'unidades_disponibles']
         for field in required_fields:
             if not data.get(field):
                 raise serializers.ValidationError({field: f"El campo '{field}' es requerido."})
@@ -34,7 +34,7 @@ class ProductModelSerializer(serializers.ModelSerializer):
 class ProductModelListFilterSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductModel
-        fields = ['id','nombre','tipo_producto','color','valor','unidades_disponibles','numero_producto']
+        fields = ['id','image','nombre','tipo_producto','detalles','valor','unidades_disponibles','numero_producto']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -48,7 +48,7 @@ class ProductModelListFilterSerializer(serializers.ModelSerializer):
 class ProductModelRetrieveProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductModel
-        fields = ['id','nombre','tipo_producto','color','valor','valor_mayor','unidades_disponibles','numero_producto']
+        fields = ['id','nombre','tipo_producto','detalles','valor','valor_mayor','unidades_disponibles','numero_producto']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)

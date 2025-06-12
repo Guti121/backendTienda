@@ -104,11 +104,11 @@ class ProductListFilterAPIView( generics.ListAPIView):
         if query:
             queryset = queryset.filter(
                 Q(nombre__icontains=query) | 
-                Q(color__icontains=query) |
+                Q(detalles__icontains=query) |
                 Q(valor__icontains=query)|
                 Q(numero_producto__icontains=query)
             )
-        return queryset
+        return queryset[:10]
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()

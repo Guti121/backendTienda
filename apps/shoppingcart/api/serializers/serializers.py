@@ -134,7 +134,7 @@ class ProductModelFilterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProductModel
-        fields = ['id', 'nombre', 'tipo_producto', 'color', 'valor', 'unidades_disponibles']
+        fields = ['id', 'nombre', 'tipo_producto', 'detalles', 'valor', 'unidades_disponibles']
     
     def to_representation(self, instance):
         """

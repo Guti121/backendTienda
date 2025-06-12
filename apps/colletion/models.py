@@ -25,7 +25,7 @@ class TypeProductModel(BaseModel):
 class ProductModel(BaseModel):
     nombre = models.CharField(max_length=100,unique=False,blank=False)
     tipo_producto = models.ForeignKey("colletion.TypeProductModel",related_name='Tipo_de_producto', on_delete=models.CASCADE)
-    color = models.CharField(max_length=50,blank=False)
+    detalles = models.CharField(max_length=100)
     valor_mayor=models.DecimalField(max_digits=10, decimal_places=2,blank=False)
     valor_costos_fijos=models.DecimalField(max_digits=10, decimal_places=2, default=0)
     valor = models.DecimalField(max_digits=10, decimal_places=2,blank=False)
