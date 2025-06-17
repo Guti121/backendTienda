@@ -6,7 +6,7 @@ from Tienda_Virtual.globalFunctions import company_owner
 from apps.base.api.user.viewsPermissions import IsAdminOrCreator, IsWorkerOrCreator, isCreator, isWorker
 from apps.colletion.models import ProductModel
 from apps.base.api.token.authentication_mixins import Authentication
-from apps.colletion.api.serializers.serializer import ProductModelListFilterSerializer, ProductModelRetrieveProductSerializer,ProductModelSerializer,ProductModelDestroySerializer, ProductModelUpdateProductSerializer
+from apps.colletion.api.serializers.serializer import ProductModelListFilterSerializer, ProductModelRetrieveProductCreatorSerializer, ProductModelRetrieveProductSerializer,ProductModelSerializer,ProductModelDestroySerializer, ProductModelUpdateProductSerializer
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
@@ -30,7 +30,10 @@ class ListProductAPIView(ListAPIView):
 class ProductRetrieveAPIView( generics.RetrieveAPIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated,IsWorkerOrCreator]
-    serializer_class = ProductModelRetrieveProductSerializer
+    if isCreator:
+        serializer_class = ProductModelRetrieveProductSerializer
+    else:
+        serializer_class = ProductModelRetrieveProductCreatorSerializer
 
     def get_queryset(self):
         company = company_owner(self.request.user)

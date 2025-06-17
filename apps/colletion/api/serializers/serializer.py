@@ -48,7 +48,21 @@ class ProductModelListFilterSerializer(serializers.ModelSerializer):
 class ProductModelRetrieveProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductModel
-        fields = ['id','image','nombre','tipo_producto','detalles','valor','valor_mayor','unidades_disponibles','numero_producto']
+        fields = ['id','image','nombre','tipo_producto','detalles','valor','unidades_disponibles','numero_producto']
+
+    def to_representation(self, instance):
+        representation = super().to_representation(instance)
+        
+        # Aquí cambiamos el campo 'categoria' de ID a 'nombre'
+        category_name = instance.tipo_producto.tipo_producto  
+        representation['tipo_producto'] = category_name
+        
+        return representation
+    
+class ProductModelRetrieveProductCreatorSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ProductModel
+        fields = ['id','image','nombre','tipo_producto','detalles','valor','valor_mayor','valor_costos_fijos','unidades_disponibles','numero_producto']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
