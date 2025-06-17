@@ -74,6 +74,10 @@ class ProductFilterAdminAPIView(generics.ListAPIView):
             queryset = queryset.filter(unidades_disponibles__gt=0).order_by('-unidades_disponibles')
         elif filter == "2":  # Orden ascendente de unidades
             queryset = queryset.filter(unidades_disponibles__gt=0).order_by('unidades_disponibles')
+        elif filter == "3":  # Orden descendente por fecha de creación
+            queryset = queryset.order_by('-creado_en')
+        elif filter == "4":  # Orden ascendente por fecha de creación
+            queryset = queryset.order_by('creado_en')
         elif filter == "5":  # Orden ascendente de unidades
             queryset = queryset.order_by(Lower('nombre'))
 
@@ -122,7 +126,7 @@ class ProductListFilterAPIView( generics.ListAPIView):
 class ProductCreateView( generics.CreateAPIView):
     serializer_class = ProductModelSerializer
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated,IsAdminOrCreator]
+    permission_classes = [IsAuthenticated,isCreator]
     
     def create(self, request, *args, **kwargs):
         # Crear una copia mutable de los datos

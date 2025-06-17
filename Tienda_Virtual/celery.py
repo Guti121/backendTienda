@@ -18,7 +18,7 @@ from celery.schedules import crontab
 app.conf.beat_schedule = {
     'generar-reporte-ventas-cada-noche': {
         'task': 'apps.inventario.tasks.generar_reporte_ventas_dia',
-        'schedule': crontab(minute=59,hour=23),#minute=59,hour=23
+        'schedule': crontab(minute=16,hour=16),#minute=59,hour=23
     },
     'generar-reporte-ventas-mensual': {
         'task': 'apps.inventario.tasks.generar_reporte_ventas_mes',

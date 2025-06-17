@@ -21,6 +21,7 @@ import io
 class LecturaCodigoBarrasAPIView(APIView):
     permission_classes = [IsAuthenticated,IsWorkerOrCreator]
     authentication_classes = [JWTAuthentication]  
+    serializerClass = ProductModelFilterSerializer# Aquí se define el serializador
 
     def post(self, request):
         # Verificar que hay un archivo de imagen en los datos
@@ -53,14 +54,11 @@ class LecturaCodigoBarrasAPIView(APIView):
                 producto = barcode.product
                 if producto.disponible and int(producto.unidades_disponibles) >= int(cantidad):
                     # Retorna el producto o cualquier detalle que necesites del producto
-                    return Response({
-                        'mensaje': 'Código de barras encontrado',
-                        'producto': {
-                            'nombre': producto.nombre,  # Asegúrate de que el campo exista en el modelo ProductModel
-                            'codigo':producto.numero_producto,
-                            'cantidad': producto.unidades_disponibles,  # Otro campo de ejemplo
-                        }
-                    }, status=status.HTTP_200_OK)
+                    serializer = self.serializerClass(producto)
+
+                    # Retornar la respuesta con los datos serializados
+                    return Response(serializer.data, status=status.HTTP_200_OK)
+ 
                 else:
                     return Response({'error': 'No se encuentra disponible ese stock del producto'}, status=status.HTTP_400_BAD_REQUEST)
             else:
