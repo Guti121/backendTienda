@@ -33,9 +33,9 @@ class ProductRetrieveAPIView(generics.RetrieveAPIView):
 
     def get_serializer_class(self):
         if profile_user(self.request.user) == "creator":
-            return ProductModelRetrieveProductSerializer
-        else:
             return ProductModelRetrieveProductCreatorSerializer
+        else:
+            return ProductModelRetrieveProductSerializer
 
     def get_queryset(self):
         company = company_owner(self.request.user)
