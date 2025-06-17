@@ -2,7 +2,7 @@ from calendar import c
 import random
 from rest_framework import generics
 from rest_framework.generics import DestroyAPIView,ListAPIView
-from Tienda_Virtual.globalFunctions import company_owner
+from Tienda_Virtual.globalFunctions import company_owner, profile_user
 from apps.base.api.user.viewsPermissions import IsAdminOrCreator, IsWorkerOrCreator, isCreator, isWorker
 from apps.colletion.models import ProductModel
 from apps.base.api.token.authentication_mixins import Authentication
@@ -27,20 +27,22 @@ class ListProductAPIView(ListAPIView):
         return ProductModel.objects.filter(tienda=company)
 
 ##Podemos listar un producto en especifico  
-class ProductRetrieveAPIView( generics.RetrieveAPIView):
+class ProductRetrieveAPIView(generics.RetrieveAPIView):
     authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated,IsWorkerOrCreator]
-    if isCreator:
-        serializer_class = ProductModelRetrieveProductSerializer
-    else:
-        serializer_class = ProductModelRetrieveProductCreatorSerializer
+    permission_classes = [IsAuthenticated, IsWorkerOrCreator]
+
+    def get_serializer_class(self):
+        if profile_user(self.request.user) == "creator":
+            return ProductModelRetrieveProductSerializer
+        else:
+            return ProductModelRetrieveProductCreatorSerializer
 
     def get_queryset(self):
         company = company_owner(self.request.user)
         return ProductModel.objects.filter(tienda=company)
     
     def retrieve(self, request, *args, **kwargs):
-        pk = kwargs.get("pk")  # Obtén el `pk` manualmente si es necesario
+        pk = kwargs.get("pk")
         try:
             instance = self.get_queryset().get(pk=pk)
         except ProductModel.DoesNotExist:
@@ -48,6 +50,7 @@ class ProductRetrieveAPIView( generics.RetrieveAPIView):
 
         serializer = self.get_serializer(instance)
         return Response(serializer.data)
+
         
 ##Podemos FILTRAR por productos
 class ProductFilterAdminAPIView(generics.ListAPIView):
