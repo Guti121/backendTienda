@@ -25,9 +25,9 @@ class FacturaDetalle(BaseModel):
         if self.producto:  
             self.nombre_producto = self.producto.nombre  # Guarda el nombre del producto antes de que pueda eliminarse
             self.valor_und=self.producto.valor #Guarda el valor del producto por unidad 
-            self.valor_mayor_und=self.producto.valor_mayor
+            self.valor_mayor_und=self.producto.valor_mayor * self.cantidad
             if self.producto.valor_costos_fijos:
-                self.valor_con_CF=self.producto.valor_costos_fijos
+                self.valor_con_CF = (self.producto.valor_costos_fijos or 0) * self.cantidad
             else:
                 self.valor_con_CF=0
         super().save(*args, **kwargs)
