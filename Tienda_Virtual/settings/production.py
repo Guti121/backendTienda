@@ -70,3 +70,43 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'  # También Redis para almacenar resultados
 CELERY_TIMEZONE = 'America/Bogota'  # O la zona horaria que estés usando
 
+
+
+# No es necesario configurar un directorio local con S3
+MEDIA_ROOT = None  	
+#onfiguración de S3
+AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')  # Lo tomas de tu archivo .env
+AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')  # Lo tomas de tu archivo .env
+#AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')  # Lo tomas de tu archivo .env
+AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', 'us-east-1')  # Cambia por tu región
+AWS_STORAGE_BUCKET_NAME = 'media-stockapp03042025'
+
+
+AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
+
+# URL base para acceder a los archivos de medios
+MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
+
+# Archivos estáticos en S3
+STATICFILES_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/static/'
+
+# Almacenamiento de archivos multimedia
+DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+
+# Configuración de CORS (si lo necesitas)
+CORS_ALLOW_CREDENTIALS = True
+
+# Configuración de STORAGES
+STORAGES = {
+    'staticfiles': {
+        'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',
+    },
+    'default': {
+        'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',
+    },
+}
+
+# Otros ajustes
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
