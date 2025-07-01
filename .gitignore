@@ -15,6 +15,9 @@ ENV/
 celerybeat-schedule
 8000
 /Tienda_Virtual/settings/local.py
+/Tienda_Virtual/settings/base.py
+/Tienda_Virtual/wsgi.py
+manage.py
 /Tienda_Virtual/settings
 # Django stuff
 *.pot

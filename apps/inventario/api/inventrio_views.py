@@ -1,98 +1,121 @@
+from datetime import date
 from rest_framework.response import Response
 from rest_framework import status
 
 from rest_framework.generics import ListAPIView
-from apps.colletion.models import ProductModel
 from babel.numbers import format_currency
-
-from apps.inventario.api.serializers.serializer import InventarioListFilterSerializer
+from rest_framework.views import APIView
+from django.db.models import Sum
+from apps.inventario.api.serializers.serializer import InventarioListFilterSerializer, ReporteVentasDiarioSerializer, ReporteVentasMensualSerializer
 #Vista para realizar el inventario actual 
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
 from apps.base.api.user.viewsPermissions import isCreator
+from apps.inventario.models import ReporteVentasMensual,ReporteVentasDiario
+from django.db.models.functions import ExtractMonth,ExtractYear
+from Tienda_Virtual.globalFunctions import company_owner
 
 
 class InventarioView(ListAPIView):
-    authentication_classes = [JWTAuthentication]  # Agrega JWTAuthentication
-    permission_classes = [IsAuthenticated,isCreator]  # Agrega IsAuthenticated
-   
+    serializer_class = ReporteVentasDiarioSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, isCreator]
 
-    def post(self, request, *args, **kwargs):
-        productos = ProductModel.objects.filter(disponible=True)
-        print(productos)
-        valor_x_mayor = 0.0
-        valor_detal = 0.0
-        valor_total_producto = 0.0
-        numero_productos = 0
+    def get_queryset(self):
+        user = self.request.user
+        owner_company = company_owner(user)
+        month = self.request.query_params.get('month')
+        year = self.request.query_params.get('year')
 
-        # Sumamos los valores de los productos
-        for producto in productos:
-            #valor total productos x mayor
-            valor_x_mayor += producto.unidades_disponibles * float(producto.valor_mayor)
-            valor_detal  += producto.unidades_disponibles * float(producto.valor) 
-            numero_productos +=producto.unidades_disponibles
+        queryset = ReporteVentasDiario.objects.filter(tienda=owner_company)
 
-        # Calculamos la ganancia total
-        
-        valor_ganancia = valor_detal - valor_x_mayor
-        
+        if month and year:
+            try:
+                month = int(month)
+                year = int(year)
+                queryset = queryset.annotate(
+                    month_field=ExtractMonth('fecha'),
+                    year_field=ExtractYear('fecha')
+                ).filter(month_field=month, year_field=year).order_by('-fecha')
+            except ValueError:
+                pass  # Si no son números válidos, no filtramos
 
-        # Formatear los valores a COP
-        valor_x_mayor_cop = format_currency(valor_x_mayor, 'COP', locale='es_CO')
-        valor_detal_cop = format_currency(valor_detal, 'COP', locale='es_CO')
-        valor_ganancia_cop = format_currency(valor_ganancia, 'COP', locale='es_CO')
+        return queryset
 
-        # Retornamos los resultados
+class InventarioMesView(ListAPIView):
+    serializer_class = ReporteVentasMensualSerializer
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, isCreator]
+
+    def get_queryset(self):
+        user = self.request.user
+        owner_company = company_owner(user)
+        month = self.request.query_params.get('month')
+        year = self.request.query_params.get('year')
+
+        queryset = ReporteVentasMensual.objects.filter(tienda=owner_company)
+
+        if month and year:
+            try:
+                month = int(month)
+                year = int(year)
+                queryset = queryset.annotate(
+                    month_field=ExtractMonth('fecha'),
+                    year_field=ExtractYear('fecha')
+                ).filter(month_field=month, year_field=year).order_by('-fecha')
+            except ValueError:
+                pass
+
+        return queryset
+
+
+
+
+class ResumenVentasMensualView(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, isCreator]
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        owner_company = company_owner(user)
+
+        # Recibir mes y año desde la URL o usar valores actuales por defecto
+        try:
+            month = int(request.query_params.get('month', date.today().month))
+            year = int(request.query_params.get('year', date.today().year))
+            print(month, year)
+        except ValueError:
+            return Response({"error": "El mes y año deben ser números válidos."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Validaciones opcionales
+        if not (1 <= month <= 12):
+            return Response({"error": "El mes debe estar entre 1 y 12."}, status=400)
+
+        reportes = ReporteVentasDiario.objects.annotate(
+            mes_anno=ExtractMonth('fecha'),
+            year_anno=ExtractYear('fecha')
+        ).filter(
+            mes_anno=month,
+            year_anno=year,
+            tienda=owner_company
+        )
+
+        resumen = reportes.aggregate(
+            total_productos_vendidos=Sum('productos_vendidos'),
+            total_valor_CF=Sum('total_valor_con_CF'),
+            total_subtotal=Sum('total_subtotal'),
+            total_valor_mayor=Sum('total_valor_mayor_und'),
+        )
+
         return Response({
-            'Numero de Total de Productos':numero_productos,
-            'Valor x Mayor productos ': valor_x_mayor_cop,
-            'valor Total Producto sin ganancia': valor_detal_cop,
-            'valor Total de ganancias': valor_ganancia_cop
-        },status=status.HTTP_200_OK)
-    
-
-
-class InventarioViewFilter(ListAPIView):
-    authentication_classes = [JWTAuthentication]  # Agrega JWTAuthentication
-    permission_classes = [IsAuthenticated,isCreator]  # Agrega IsAuthenticated
-
-    def post(self, request, *args, **kwargs):
-       
-        # Validamos los datos con el serializer
-        serializer = InventarioListFilterSerializer(data=request.data)
-        if serializer.is_valid(raise_exception=True):
-            # Accedemos a los valores validados
-            filter_value = serializer.validated_data['filter']
-            valor_value = serializer.validated_data['valor']
-
-        # Inicializamos las variables para el cálculo
-        valor_x_mayor = 0.0
-        valor_detal = 0.0
-        numero_productos = 0
-        # Usamos un diccionario para pasar el filtro dinámicamente
-        filter_kwargs = {f"{filter_value}": valor_value}
-
-        # Filtrar los productos usando el valor dinámico
-        productos = ProductModel.objects.filter(**filter_kwargs)
-
-        # Ahora calculamos las ganancias
-        for producto in productos:
-            valor_x_mayor += producto.unidades_disponibles *float(producto.valor_mayor)
-            valor_detal += producto.unidades_disponibles * float(producto.valor)
-            numero_productos+= producto.unidades_disponibles
-        # Cálculo de la ganancia
-        valor_ganancia = valor_detal - valor_x_mayor
-         # Formatear los valores a COP
-        valor_x_mayor_cop = format_currency(valor_x_mayor, 'COP', locale='es_CO')
-        valor_detal_cop = format_currency(valor_detal, 'COP', locale='es_CO')
-        valor_ganancia_cop = format_currency(valor_ganancia, 'COP', locale='es_CO')
-
-
-        # Retornar los resultados en la respuesta
-        return Response({
-            'productos': filter_value,  # Cantidad de productos
-            'Numero de Productos':numero_productos,
-            'valor x mayor': valor_x_mayor_cop,
-            'valor detal': valor_detal_cop,
-            'Ganancia total': valor_ganancia_cop
+            "mes": month,
+            "año": year,
+            "tienda": owner_company.name,
+            "resumen": {
+                "productos_vendidos": resumen["total_productos_vendidos"] or 0,
+                "costos_fijos_cubiertos": resumen["total_valor_CF"] or 0,
+                "valor_al_por_mayor": resumen["total_valor_mayor"] or 0,
+                "total_ventas": resumen["total_subtotal"] or 0,
+            }
         }, status=status.HTTP_200_OK)

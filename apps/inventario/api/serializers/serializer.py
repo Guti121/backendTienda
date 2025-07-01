@@ -1,6 +1,7 @@
 from rest_framework import serializers
 
 from apps.colletion.models import ProductModel
+from apps.inventario.models import ReporteVentasDiario
 
 
 class InventarioListFilterSerializer(serializers.Serializer):
@@ -18,3 +19,17 @@ class InventarioListFilterSerializer(serializers.Serializer):
 
 
 
+
+
+class ReporteVentasDiarioSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReporteVentasDiario
+        fields = ['fecha', 'facturas_total', 'productos_vendidos','total_subtotal']
+
+
+class ReporteVentasMensualSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ReporteVentasDiario
+        fields = ['fecha', 'facturas_total', 'productos_vendidos','total_valor_mayor_und', 'total_valor_con_CF', 'total_subtotal']
+
+    
