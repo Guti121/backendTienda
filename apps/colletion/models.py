@@ -33,6 +33,7 @@ class ProductModel(BaseModel):
     disponible = models.BooleanField(default=True)
     image= models.ImageField(upload_to='productos',null=True)
     numero_producto = models.CharField(max_length=5, unique=True, null=False, blank=True)
+    publicar = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         # Capitalizar el nombre antes de guardar
