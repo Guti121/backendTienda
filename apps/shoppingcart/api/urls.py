@@ -14,5 +14,6 @@ urlpatterns = [
     path('codigo_de_barras/',LecturaCodigoBarrasAPIView.as_view(),name='lector codigo de barras'),
     path('codigo_de_barras_text/',LecturaCodigoBarrasTextAPIView.as_view(),name='lector codigo de barras por texto'),
     path('api/barcode/<int:pk>/', RetrieveBarCode.as_view(), name='barcode-detail'),
+
     
 ]

@@ -1,16 +1,37 @@
 from django.conf import settings
 from django.db import models
+from django.core.exceptions import ValidationError
+from django.utils.text import slugify
+from django.core.validators import RegexValidator
+
+username_validator = RegexValidator(
+    regex=r'^[a-zA-Z0-9._]+$',
+    message="Solo se permiten letras, números, puntos y guiones bajos. No se permiten espacios ni símbolos."
+)
 
 class Company(models.Model):
     url_logo = models.URLField(max_length=500)
     nit = models.CharField(max_length=20, unique=True)  # NIT único
     company = models.CharField(max_length=255)
-    name = models.CharField(max_length=255)
+    name =models.CharField(
+        max_length=255,
+        unique=True,
+        validators=[username_validator])
     phone = models.CharField(max_length=20)
     email = models.EmailField(unique=True)
     direction = models.CharField(max_length=255)
     municipality = models.CharField(max_length=100)
     creator_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+
+    def clean(self):
+        clean_name = self.name.lower().strip()
+        if Company.objects.filter(name__iexact=clean_name).exclude(pk=self.pk).exists():
+            raise ValidationError("Este nombre ya está en uso.")
+        self.name = clean_name
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         return self.company

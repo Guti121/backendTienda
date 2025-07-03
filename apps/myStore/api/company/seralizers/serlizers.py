@@ -15,6 +15,12 @@ class CreateCompanySerializer(serializers.ModelSerializer):
         if Company.objects.filter(nit=value).exists():
             raise serializers.ValidationError("El NIT ya está registrado.")
         return value
+    
+    def validate_name(self, value):
+        """ Verificar que el NIT no exista """
+        if Company.objects.filter(name=value).exists():
+            raise serializers.ValidationError("El nombre ya está registrado.")
+        return value
 
     def validate_email(self, value):
         """ Verificar que el correo no esté registrado """
