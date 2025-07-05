@@ -9,6 +9,6 @@ class CatalogoCompanySerializer(serializers.ModelSerializer):
     """
     class Meta:
         model = Company
-        fields = ['id', 'name', 'url_logo', 'phone', 'email', 'direction', 'municipality']
+        fields = ['id', 'name','company', 'url_logo', 'phone', 'email', 'direction', 'municipality']
     
     
