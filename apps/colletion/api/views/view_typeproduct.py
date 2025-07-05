@@ -67,23 +67,24 @@ class TypeProductCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrCreator]
     queryset = TypeProductModel.objects.all()
 
-    def perform_create(self, serializer):
-        """Asigna automáticamente la empresa del usuario al producto antes de guardarlo."""
-        company= company_owner(self.request.user) # Obtener la empresa
-        serializer.save(creado_por=self.request.user, tienda=company)
-
     def create(self, request, *args, **kwargs):
         tipo_producto = request.data.get('tipo_producto')
-        if not tipo_producto:   
+        if not tipo_producto:
             return Response({"error": "El valor no puede estar vacío."}, status=status.HTTP_400_BAD_REQUEST)
-        
-        if TypeProductModel.objects.filter(tipo_producto=tipo_producto).exists():
+
+        self.company = company_owner(self.request.user)  # Guardar en self para reutilizar
+
+        if TypeProductModel.objects.filter(tipo_producto=tipo_producto, tienda=self.company).exists():
             return Response(
                 {"error": f"El tipo de producto '{tipo_producto}' ya existe."},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        return super().create(request, *args, **kwargs)  # Llama a la lógica de DRF
+        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer):
+        serializer.save(creado_por=self.request.user, tienda=self.company)
+
 
 class TypeProductDestroyAPIView(DestroyAPIView):
     serializer_class1=TypeProductModelDestroySerializer

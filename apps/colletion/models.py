@@ -8,7 +8,9 @@ from django.core.files import File
 from apps.myStore.models import BaseModel
 
 class TypeProductModel(BaseModel):
-    tipo_producto=models.CharField(max_length=50,blank=False,unique=True)
+    tipo_producto=models.CharField(max_length=50,blank=False)
+    detalles = models.CharField(max_length=500, blank=True, null=True)
+
 
     def save(self, *args, **kwargs):
         self.tipo_producto = self.tipo_producto.capitalize()  # Convertir la primera letra en mayúscula
