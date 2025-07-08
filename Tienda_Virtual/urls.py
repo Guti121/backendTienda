@@ -32,6 +32,7 @@ urlpatterns = [
     path('inventario/', include('apps.inventario.api.urls')),
     path('base/',  include('apps.base.api.urls')),
     path('store/', include('apps.myStore.api.urls')),
+    path('catalogo/', include('apps.catalogo.api.urls')),
     path('register/', RegisterUserView.as_view(), name='register'),
 ]
 
