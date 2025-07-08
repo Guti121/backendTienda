@@ -10,7 +10,7 @@ username_validator = RegexValidator(
 )
 
 class Company(models.Model):
-    url_logo = models.URLField(max_length=500)
+    url_logo =  models.ImageField(upload_to='profileCompany',null=True)
     nit = models.CharField(max_length=20, unique=True)  # NIT único
     company = models.CharField(max_length=255)
     name =models.CharField(
