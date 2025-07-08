@@ -32,7 +32,8 @@ staticfiles/
 # MacOS/Linux/Windows OS clutter
 .DS_Store
 Thumbs.db
-
+/barcodes
+/productos
 
 */migrations/*.py
 !*/migrations/__init__.py   
