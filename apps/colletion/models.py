@@ -34,7 +34,7 @@ class ProductModel(BaseModel):
     unidades_disponibles = models.PositiveIntegerField()
     disponible = models.BooleanField(default=True)
     image= models.ImageField(upload_to='productos',null=True)
-    numero_producto = models.CharField(max_length=5, unique=True, null=False, blank=True)
+    numero_producto = models.CharField(max_length=5, unique=False, null=False, blank=True)
     publicar = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
@@ -44,6 +44,8 @@ class ProductModel(BaseModel):
         # Validar que tienda esté definida antes de guardar
         if not self.tienda:
             raise ValueError("El campo 'tienda' es obligatorio.")
+        if ProductModel.objects.filter(nombre=self.nombre, tienda=self.tienda).exclude(id=self.id).exists():
+            raise ValueError("Ya existe un producto con este nombre en esta tienda.")
 
         # Si no tiene número de producto, generarlo
         if not self.numero_producto:
