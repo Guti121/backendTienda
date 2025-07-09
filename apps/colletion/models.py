@@ -86,7 +86,7 @@ class ProductModel(BaseModel):
         # Crear el objeto Bar_codeModel y guardarlo
         barcode_instance = Bar_codeModel(
             product=self,
-            barcode=ContentFile(buffer.read(), name=f"barcode_{codigo_sin_control}.png"),  # Usar el código completo para el nombre del archivo
+            barcode=ContentFile(buffer.read(), name=f"barcode_{codigo_sin_control}_{tienda.name}.png"),  # Usar el código completo para el nombre del archivo
             code=ean.get_fullcode(),  # Guarda el código completo, incluyendo el dígito de control
             tienda=tienda,
             creado_por=creado_por
