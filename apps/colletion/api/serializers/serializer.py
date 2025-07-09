@@ -87,7 +87,15 @@ class ProductModelDestroySerializer(serializers.ModelSerializer):
 class ProductModelUpdateProductSerializer(serializers.ModelSerializer):
     class Meta:
         model = ProductModel
-        fields = ['unidades_disponibles']
+        fields = [
+                    "nombre"
+                    "detalles"
+                    "valor_mayor"
+                    "valor_costos_fijos"
+                    "valor"
+                    "unidades_disponibles"
+                    "image"
+                    "publicar"]
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
