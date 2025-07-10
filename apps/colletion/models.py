@@ -6,6 +6,7 @@ from django.db import models,transaction
 from io import BytesIO
 from django.core.files import File
 from apps.myStore.models import BaseModel
+from django.core.exceptions import ValidationError
 
 class TypeProductModel(BaseModel):
     tipo_producto=models.CharField(max_length=50,blank=False)
@@ -23,6 +24,37 @@ class TypeProductModel(BaseModel):
         
     def __str__(self):
         return f"{self.id} , {self.tipo_producto}"
+
+
+
+
+class ProductImage(BaseModel):
+    producto = models.ForeignKey("colletion.ProductModel", on_delete=models.CASCADE, related_name='imagenes')
+    imagen = models.ImageField(upload_to='productos/imagenes/')
+    principal = models.BooleanField(default=False)
+
+    def clean(self):
+        if self.producto.imagenes.count() >= 5 and not self.pk:
+            raise ValidationError("Este producto ya tiene 5 imágenes.")
+        
+        # Solo una imagen puede ser principal
+        if self.principal:
+            otras = self.producto.imagenes.exclude(pk=self.pk)
+            if otras.filter(principal=True).exists():
+                raise ValidationError("Solo una imagen puede ser principal.")
+
+    def save(self, *args, **kwargs):
+        self.clean()
+
+        if not self.producto.imagenes.exclude(pk=self.pk).filter(principal=True).exists():
+            self.principal = True  # Si no hay otra imagen principal, esta se vuelve principal automáticamente
+
+        super().save(*args, **kwargs)
+
+
+    def __str__(self):
+        return f"Imagen de {self.producto.nombre}"
+
     
 class ProductModel(BaseModel):
     nombre = models.CharField(max_length=100,unique=False,blank=False)
@@ -33,9 +65,11 @@ class ProductModel(BaseModel):
     valor = models.DecimalField(max_digits=10, decimal_places=2,blank=False)
     unidades_disponibles = models.PositiveIntegerField()
     disponible = models.BooleanField(default=True)
-    image= models.ImageField(upload_to='productos',null=True)
     numero_producto = models.CharField(max_length=5, unique=False, null=False, blank=True)
     publicar = models.BooleanField(default=False)
+
+    def imagen_principal(self):
+        return self.imagenes.filter(principal=True).first()
 
     def save(self, *args, **kwargs):
         # Capitalizar el nombre antes de guardar

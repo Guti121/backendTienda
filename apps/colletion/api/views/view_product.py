@@ -20,7 +20,7 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 class ListProductAPIView(ListAPIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated,IsAdminOrCreator]
-    serializer_class = ProductModelSerializer
+    serializer_class = ProductModelListFilterSerializer
 
     def get_queryset(self):
         company = company_owner(self.request.user)
