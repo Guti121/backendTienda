@@ -1,10 +1,11 @@
 from calendar import c
 import random
+from django.utils import timezone
 from rest_framework import generics
 from rest_framework.generics import DestroyAPIView,ListAPIView
 from Tienda_Virtual.globalFunctions import company_owner, profile_user
 from apps.base.api.user.viewsPermissions import IsAdminOrCreator, IsWorkerOrCreator, isCreator, isWorker
-from apps.colletion.models import ProductModel
+from apps.colletion.models import ProductImage, ProductModel
 from apps.base.api.token.authentication_mixins import Authentication
 from apps.colletion.api.serializers.serializer import ProductModelListFilterSerializer, ProductModelRetrieveProductCreatorSerializer, ProductModelRetrieveProductSerializer,ProductModelSerializer,ProductModelDestroySerializer, ProductModelUpdateProductSerializer
 from rest_framework.response import Response
@@ -256,30 +257,38 @@ class ProductUpdateApiView(generics.UpdateAPIView):
         return queryset
     
     def patch(self, request, *args, **kwargs):
-        # Verificar autenticación
         if not request.user or not request.user.is_authenticated:
             return Response({'error': 'Usuario no autorizado.'}, status=status.HTTP_403_FORBIDDEN)
 
-    
-        # Obtener el producto basado en el `id` de la URL
         pk = kwargs.get('pk')
         product = self.get_queryset().filter(id=pk).first()
 
         if not product:
             return Response({'error': 'Producto no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
 
-        # Usar el serializer para validar y actualizar el producto
         serializer = self.get_serializer(product, data=request.data, partial=True)
         if serializer.is_valid():
-            # Verificar si `unidades_disponibles` está en la petición
             unidades_disponibles = request.data.get('unidades_disponibles')
             if unidades_disponibles is not None:
-                unidades_disponibles = int(unidades_disponibles)  # Convertir a entero
-                product.disponible = unidades_disponibles > 0  # ✅ Optimización
+                unidades_disponibles = int(unidades_disponibles)
+                product.disponible = unidades_disponibles > 0
 
-            # Guardar el producto actualizado dentro de un bloque try-except
             try:
                 serializer.save(modificado_por=self.request.user)
+
+                # ✅ MANEJAR ARCHIVOS
+                imagenes_files = request.FILES.getlist("imagenes")
+                if imagenes_files:
+                    product.imagenes.all().delete()
+                    for image in imagenes_files:
+                        company = company_owner(request.user)
+                    
+                        ProductImage.objects.create(producto=product, 
+                                                    imagen=image,
+                                                    tienda=company,
+                                                    creado_por=request.user,  # Asigna el usuario que crea el producto
+                                                    creado_en=timezone.now(),)
+
                 return Response(serializer.data, status=status.HTTP_200_OK)
             except Exception as e:
                 return Response({'error': f'Error al guardar el producto: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

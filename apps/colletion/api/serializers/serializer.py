@@ -1,3 +1,4 @@
+from email.mime import image
 from django.utils import timezone
 import time
 from Tienda_Virtual.globalFunctions import company_owner
@@ -135,28 +136,26 @@ class ProductModelDestroySerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("El campo 'id' es requerido.")
         
         return data
+
+
 ##serializer update Product
 class ProductModelUpdateProductSerializer(serializers.ModelSerializer):
+    imagenes = ProductImageSerializer( many=True, read_only=True)
+
     class Meta:
         model = ProductModel
         fields = [
-                    "nombre",
-                    "detalles",
-                    "valor_mayor",
-                    "valor_costos_fijos",
-                    "valor",
-                    "unidades_disponibles",
-                    "image",
-                    "publicar"]
+            "nombre",
+            "detalles",
+            "valor_mayor",
+            "valor_costos_fijos",
+            "valor",
+            "unidades_disponibles",
+            "publicar",
+            "imagenes"
+        ]
 
-    def to_representation(self, instance):
-        representation = super().to_representation(instance)
-        
-        # Aquí cambiamos el campo 'categoria' de ID a 'nombre'
-        category_name = instance.tipo_producto.tipo_producto  
-        representation['tipo_producto'] = category_name
-        
-        return representation
+  
 
 #.............................................................................
 """.............Se realizan los serializadores para Type Product..........."""
