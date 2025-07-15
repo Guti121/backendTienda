@@ -238,6 +238,11 @@ class ProductDestroyAPIView(DestroyAPIView):
         product = ProductModel.objects.filter(id=pk, tienda = company).first()
         if not product:
             return Response({'error': 'No existe un formulario con estos datos!'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # ✅ Eliminar imágenes asociadas
+        for img in product.imagenes.all():
+            img.imagen.delete(save=False)  # Elimina archivo del storage (S3)
+            img.delete()                   # Elimina registro del modelo
 
         # Eliminar el producto
         product.delete()
@@ -278,8 +283,20 @@ class ProductUpdateApiView(generics.UpdateAPIView):
 
                 # ✅ MANEJAR ARCHIVOS
                 imagenes_files = request.FILES.getlist("imagenes")
+
+                                
+                # Si el usuario explícitamente manda imágenes vacías
+                if "imagenes" in request.FILES and not imagenes_files:
+                    for img in product.imagenes.all():
+                        img.imagen.delete(save=False)  # Borra el archivo de S3/local
+                        img.delete()  # Borra el objeto del modelo
+                if imagenes_files and len(imagenes_files) > 5:
+                    return Response({'error': 'No puedes subir más de 5 imágenes por producto.'}, status=status.HTTP_400_BAD_REQUEST)   
+                # Eliminar imágenes existentes si se envían nuevas
                 if imagenes_files:
-                    product.imagenes.all().delete()
+                    for img in product.imagenes.all():
+                        img.imagen.delete(save=False)  # Borra el archivo de S3/local
+                        img.delete()  # Borra el objeto del modelo
                     for image in imagenes_files:
                         company = company_owner(request.user)
                     

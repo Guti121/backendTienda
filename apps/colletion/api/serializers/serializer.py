@@ -1,4 +1,5 @@
 from email.mime import image
+from typing import Required
 from django.utils import timezone
 import time
 from Tienda_Virtual.globalFunctions import company_owner
@@ -140,7 +141,7 @@ class ProductModelDestroySerializer(serializers.ModelSerializer):
 
 ##serializer update Product
 class ProductModelUpdateProductSerializer(serializers.ModelSerializer):
-    imagenes = ProductImageSerializer( many=True, read_only=True)
+    imagenes = ProductImageSerializer( many=True, required=False,read_only=True)
 
     class Meta:
         model = ProductModel

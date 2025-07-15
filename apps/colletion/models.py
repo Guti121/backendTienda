@@ -8,6 +8,16 @@ from django.core.files import File
 from apps.myStore.models import BaseModel
 from django.core.exceptions import ValidationError
 
+
+from uuid import uuid4
+
+def upload_to_product_image(instance, filename):
+    tienda_nombre = instance.producto.tienda.nombre.replace(" ", "_").lower()
+    extension = filename.split(".")[-1]
+    nombre_archivo = f"{uuid4().hex}.{extension}"
+    return f"productos/{tienda_nombre}/{nombre_archivo}"
+
+
 class TypeProductModel(BaseModel):
     tipo_producto=models.CharField(max_length=50,blank=False)
     detalles = models.CharField(max_length=500, blank=True, null=True)
@@ -30,14 +40,13 @@ class TypeProductModel(BaseModel):
 
 class ProductImage(BaseModel):
     producto = models.ForeignKey("colletion.ProductModel", on_delete=models.CASCADE, related_name='imagenes')
-    imagen = models.ImageField(upload_to='productos/imagenes/')
+    imagen = models.ImageField(upload_to=upload_to_product_image)
     principal = models.BooleanField(default=False)
 
     def clean(self):
         if self.producto.imagenes.count() >= 5 and not self.pk:
             raise ValidationError("Este producto ya tiene 5 imágenes.")
         
-        # Solo una imagen puede ser principal
         if self.principal:
             otras = self.producto.imagenes.exclude(pk=self.pk)
             if otras.filter(principal=True).exists():
@@ -45,12 +54,9 @@ class ProductImage(BaseModel):
 
     def save(self, *args, **kwargs):
         self.clean()
-
         if not self.producto.imagenes.exclude(pk=self.pk).filter(principal=True).exists():
-            self.principal = True  # Si no hay otra imagen principal, esta se vuelve principal automáticamente
-
+            self.principal = True
         super().save(*args, **kwargs)
-
 
     def __str__(self):
         return f"Imagen de {self.producto.nombre}"
