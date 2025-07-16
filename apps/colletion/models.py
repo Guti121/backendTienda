@@ -12,7 +12,7 @@ from django.core.exceptions import ValidationError
 from uuid import uuid4
 
 def upload_to_product_image(instance, filename):
-    tienda_nombre = instance.producto.tienda.nombre.replace(" ", "_").lower()
+    tienda_nombre = instance.producto.tienda.name.replace(" ", "_").lower()
     extension = filename.split(".")[-1]
     nombre_archivo = f"{uuid4().hex}.{extension}"
     return f"productos/{tienda_nombre}/{nombre_archivo}"
