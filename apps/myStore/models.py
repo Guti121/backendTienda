@@ -3,6 +3,7 @@ from django.db import models
 from django.core.exceptions import ValidationError
 from django.utils.text import slugify
 from django.core.validators import RegexValidator
+from django.core.files.storage import default_storage
 
 username_validator = RegexValidator(
     regex=r'^[a-zA-Z0-9._]+$',
@@ -29,7 +30,18 @@ class Company(models.Model):
             raise ValidationError("Este nombre ya está en uso.")
         self.name = clean_name
 
+    
     def save(self, *args, **kwargs):
+        # Verifica si ya existía una imagen y si está cambiando
+        if self.pk:
+            try:
+                old = Company.objects.get(pk=self.pk)
+                if old.url_logo and old.url_logo != self.url_logo:
+                    if default_storage.exists(old.url_logo.name):
+                        default_storage.delete(old.url_logo.name)
+            except Company.DoesNotExist:
+                pass
+
         self.full_clean()
         super().save(*args, **kwargs)
 
