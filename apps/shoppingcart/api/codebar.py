@@ -100,7 +100,7 @@ class LecturaCodigoBarrasTextAPIView(APIView):
                 else:
                     return Response({'error': 'No se encuentra disponible ese stock del producto'}, status=status.HTTP_400_BAD_REQUEST)
             else:
-                return Response({'mensaje': 'Código de barras no encontrado'}, status=status.HTTP_204_NO_CONTENT)
+                return Response({'mensaje': 'Código de barras no encontrado'}, status=status.HTTP_400_BAD_REQUEST)
 
         except Exception as e:
             # En caso de error, retornar un mensaje de error
