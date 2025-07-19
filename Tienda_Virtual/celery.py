@@ -1,3 +1,7 @@
+
+
+
+
 import os
 from celery import Celery
 
@@ -10,8 +14,11 @@ app = Celery('Tienda_Virtual')
 # Carga la configuración de Django en Celery
 app.config_from_object('django.conf:settings', namespace='CELERY')
 
+app.conf.timezone = 'America/Bogota'  # Configura la zona horaria de Celery
+
 # Auto-descubre tareas en todos los apps
 app.autodiscover_tasks()
+
 
 from celery.schedules import crontab
 
