@@ -83,7 +83,6 @@ class ResumenVentasMensualView(APIView):
         try:
             month = int(request.query_params.get('month', date.today().month))
             year = int(request.query_params.get('year', date.today().year))
-            print(month, year)
         except ValueError:
             return Response({"error": "El mes y año deben ser números válidos."},
                             status=status.HTTP_400_BAD_REQUEST)

@@ -1,3 +1,4 @@
+from django.utils.timezone import localtime  # ✅ El correcto
 from apps.myStore.models import Company
 from celery import shared_task
 from datetime import datetime
@@ -8,13 +9,13 @@ from django.db.models import Sum
 from datetime import timedelta
 
 #Se realizan las funciones que generaran los reportes de las facturas manejados desde celery.py 
+now_local = localtime(timezone.now())
 
 #generador de reportes diarios, llamado directamente desde celery.py
 @shared_task
 def generar_reporte_ventas_dia(fecha=None):
     print("Generando reportes de ventas del día por tienda...")
-
-    hoy = fecha or timezone.now().date()
+    hoy = fecha or now_local.date()
 
     inicio_del_dia = datetime.combine(hoy, datetime.min.time(), tzinfo=timezone.get_current_timezone())
     fin_del_dia = datetime.combine(hoy, datetime.max.time(), tzinfo=timezone.get_current_timezone())
@@ -127,7 +128,7 @@ from apps.inventario.models import ReporteVentasMensual
 def generar_reporte_ventas_mes():
     print("Generando reportes de ventas mensuales por tienda...")
 
-    hoy = timezone.now().date()
+    hoy = now_local.date()
 
     primer_dia_mes = (hoy.replace(day=1) - timezone.timedelta(days=1)).replace(day=1)
     ultimo_dia_mes = hoy.replace(day=1) - timezone.timedelta(days=1)
@@ -175,7 +176,7 @@ def generar_reporte_ventas_mes():
 
 @shared_task
 def generar_reporte_ventas_mes_update(fecha=None, tienda_id=None):
-    hoy = fecha or timezone.now().date()
+    hoy = fecha or now_local.date()
     if isinstance(hoy, str):
         hoy = datetime.fromisoformat(hoy).date()
 
