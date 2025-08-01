@@ -1,6 +1,8 @@
 from datetime import date
+from apps.colletion.models import ProductModel
 from rest_framework.response import Response
 from rest_framework import status
+from django.db.models import F, ExpressionWrapper, FloatField, Sum
 
 from rest_framework.generics import ListAPIView
 from babel.numbers import format_currency
@@ -118,3 +120,45 @@ class ResumenVentasMensualView(APIView):
                 "total_ventas": resumen["total_subtotal"] or 0,
             }
         }, status=status.HTTP_200_OK)
+    
+
+class InventarioProductos(APIView):
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, isCreator]
+
+    def post(self, request):
+        user = request.user
+        owner_company = company_owner(user)
+
+        products = (
+            ProductModel.objects
+            .filter(tienda=owner_company)
+            .annotate(
+                subtotal_mayor=ExpressionWrapper(
+                    F('unidades_disponibles') * F('valor_mayor'),
+                    output_field=FloatField()
+                ),
+                subtotal_venta=ExpressionWrapper(
+                    F('unidades_disponibles') * F('valor'),
+                    output_field=FloatField()
+                ),
+                subtotal_costos=ExpressionWrapper(
+                    F('unidades_disponibles') * F('valor_costos_fijos'),
+                    output_field=FloatField()
+                )
+            )
+        )
+
+        totals = products.aggregate(
+            total_unidades=Sum('unidades_disponibles'),
+            total_precio_mayor=Sum('subtotal_mayor'),
+            total_precio_venta=Sum('subtotal_venta'),
+            total_costos_fijos=Sum('subtotal_costos'),
+        )
+
+        return Response({
+            "total_unidades_disponibles": totals["total_unidades"] or 0,
+            "total_precio_mayor": totals["total_precio_mayor"] or 0,
+            "total_precio_venta": totals["total_precio_venta"] or 0,
+            "total_costos_fijos": totals["total_costos_fijos"] or 0,
+        })
