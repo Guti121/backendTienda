@@ -638,24 +638,42 @@ ajustarlo o volver a exponerlo como `read_only`.
 
 ### Fase 4 — Arquitectura y mantenibilidad
 
-- **Capa de servicios** (`apps/<app>/services.py`): mover ahí la lógica de negocio
-  que hoy está repartida entre `views`, `serializers` y `Model.save()`
-  (crear producto, facturar, calcular precio, generar reportes). Las vistas quedan
-  finas; los serializers solo (de)serializan.
-- Unificar la validación de producto en **un** sitio (serializer), eliminando la
-  cascada `view → serializer → model`.
-- Sacar de `BaseModel.save()` la rama muerta de `self.request_user` (nunca se
-  asigna); el patrón real es pasar `tienda`/`creado_por` en `serializer.save(...)`.
-  Alternativa limpia: un `ModelViewSet`/mixin que inyecte esos campos en
-  `perform_create`.
-- Consolidar los 5 permisos en `RolePermission(allowed_roles=(...))`.
-- Consistencia de nombres: decidir idioma (recomendado: inglés en código, español
-  en mensajes de usuario), planear el renombrado de `colletion → collection`,
-  `inventrio_views.py → inventory_views.py`, `myStore → mystore` con migraciones.
-- Quitar imports basura (`from calendar import c`, `from venv import create`) y
-  bloques comentados grandes (`FacturasListView`).
-- Rutas: unificar `trailing slash` (todas con `/`), agrupar por `router` de DRF
-  donde tenga sentido (`ModelViewSet`).
+> **Estado (2026-09-05):** subconjunto de bajo riesgo aplicado y verificado
+> (suite de 35 tests en verde, `manage.py check` OK). Lo estructural grande
+> (capa de servicios, renombrados) queda diferido con motivo.
+
+- ✅ **5 permisos → `RolePermission`**: `viewsPermissions.py` ahora tiene una
+  clase base `RolePermission` con `allowed_roles`; `isCreator`/`isWorker`/
+  `isAdmin`/`IsWorkerOrCreator`/`IsAdminOrCreator` son solo la lista de roles.
+  Los nombres se conservan → ningún import de las vistas se rompe. Comportamiento
+  idéntico (auth + activo + rol), verificado con tests.
+- ✅ **Validación de producto unificada en el serializer**:
+  `ProductCreateView.create()` tenía ~65 líneas de `float()` + `try/except` que
+  duplicaban `ProductModelSerializer.validate()` y `ProductModel.save()`. Ahora
+  toda la validación (requeridos, `valor > 0`, `valor_mayor > 0`,
+  `valor >= valor_mayor`, `unidades > 0`, nombre no duplicado por tienda
+  case-insensitive) vive en `validate()`. La vista queda solo con
+  `perform_create` (asigna `tienda`/`creado_por`). Los errores ahora son por
+  campo (`{"valor": [...]}`) en vez de `{"error": "..."}` — **posible ajuste en
+  el frontend**.
+- ✅ **`BaseModel.save()` eliminado**: dependía de un atributo `request_user` que
+  no se asignaba en ningún lado (código muerto), y además tenía un bug latente
+  (`if not self.tienda` revienta si `tienda_id` es None). El patrón real
+  (`serializer.save(tienda=..., creado_por=...)`) no lo necesitaba.
+- ✅ **Imports basura eliminados**: `from venv import create`
+  (`viewsUserCreateType.py`), `from email.mime import image` / `from typing import
+  Required` / `import time` (`serializer.py`), `from logging import
+  raiseExceptions` / `import string` / `from urllib import request`
+  (`view_config_price.py`), `import string` / `from tokenize import String`
+  (`qrCode.py`). (`from calendar import c` ya se quitó en Fase 2.)
+- ⏳ **Capa de servicios** (`apps/<app>/services.py`): **diferido**. Es un
+  refactor grande y merece su propio esfuerzo; la consolidación de permisos y
+  validación ya reduce buena parte del desorden.
+- ⏳ **Renombrados** (`colletion→collection`, `myStore→mystore`,
+  `inventrio_views.py`): diferido a una sesión dedicada (tocan app labels,
+  imports en todo el repo y migraciones).
+- ⏳ **Router/`ModelViewSet`** y unificar `trailing slash` en catálogo: diferido
+  (cambia URLs públicas; poco urgente).
 
 ### Fase 5 — Calidad y observabilidad
 
@@ -699,7 +717,9 @@ ajustarlo o volver a exponerlo como `read_only`.
 - [x] 3.x Código de barras → Celery (`transaction.on_commit`) + `backfill_barcodes`
 - [ ] 3.x S3 a `base.py` con toggle + split de `requirements/` *(diferido)*
 - [ ] 3.x Quitar `django_celery_beat` *(diferido: sesión de migraciones)*
-- [ ] 4.x Capa de servicios + validación única + permisos unificados
+- [x] 4.x Permisos unificados (`RolePermission`) + validación de producto única en el serializer + `BaseModel.save()` muerto fuera + imports basura
+- [ ] 4.x Capa de servicios (`services.py`) *(diferido)*
+- [ ] 4.x Renombrar apps/archivos con typos *(diferido: sesión de migraciones)*
 - [ ] 5.x Tests de stock/reportes/multi-tenant + OpenAPI + CI
 
 ---

@@ -62,6 +62,13 @@ class Details_company(models.Model):
 
 
 class BaseModel(models.Model):
+    """Campos comunes de auditoría/multi-tenant.
+
+    `tienda`, `creado_por` y `modificado_por` los asignan las vistas al llamar a
+    `serializer.save(tienda=..., creado_por=...)` en `perform_create`. Antes había
+    aquí un `save()` que dependía de un atributo `request_user` que nunca se
+    asignaba (código muerto): eliminado.
+    """
     tienda = models.ForeignKey('myStore.Company', on_delete=models.CASCADE, editable=False)
     creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, editable=False, related_name="%(class)s_creados")
     modificado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, editable=False, related_name="%(class)s_modificados")
@@ -70,12 +77,3 @@ class BaseModel(models.Model):
 
     class Meta:
         abstract = True
-        
-    def save(self, *args, **kwargs):
-        if not self.tienda and hasattr(self, "request_user"):
-            self.tienda = self.request_user.profile.tienda
-        if not self.creado_por and hasattr(self, "request_user"):
-            self.creado_por = self.request_user
-        if hasattr(self, "request_user"):
-            self.modificado_por = self.request_user
-        super().save(*args, **kwargs)

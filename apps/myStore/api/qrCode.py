@@ -1,5 +1,3 @@
-import string
-from tokenize import String
 from django.http import HttpResponse
 from Tienda_Virtual.globalFunctions import company_owner
 from apps.base.models import CustomUser

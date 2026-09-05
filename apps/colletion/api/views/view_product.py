@@ -145,89 +145,14 @@ class ProductCreateView( generics.CreateAPIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated,isCreator]
     
-    def create(self, request, *args, **kwargs):
-        # Crear una copia mutable de los datos
-        data = request.data.copy()
-
-        # Validar campos requeridos directamente desde el serializador
-        valor = data.get('valor')
-        unidades_disponibles = data.get('unidades_disponibles')
-        valor_mayor =data.get('valor_mayor')
-        tipo_producto=data.get('tipo_producto')
-        nombre_producto=data.get('nombre')
-
-        # Buscamos la tienda a la que pertenece el usuario 
-        company= company_owner(self.request.user)
-
-        if ProductModel.objects.filter(tienda = company ,nombre=nombre_producto).exists():
-            return Response(
-                {"error": "Este producto ya existe en la base de datos."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        if not valor or not unidades_disponibles or not tipo_producto:
-            return Response(
-                {"error": "Verifique los campos, parece que alguno está vacío."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Validar unidades disponibles
-        try:
-            if int(unidades_disponibles) <= 0:
-                return Response(
-                    {"error": "Las unidades disponibles no pueden ser menores o iguales a 0."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        except ValueError:
-            return Response(
-                {"error": "El campo 'unidades disponibles' debe ser un número válido."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Validar valor como número decimal positivo
-        try:
-            valor_decimal = float(valor)
-            if valor_decimal <= 0.00:
-                return Response(
-                    {"error": "El 'valor' debe ser mayor a 0."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        except ValueError:
-            return Response(
-                {"error": "El 'valor' debe ser un número válido."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        try:
-            valor_decimal = float(valor)
-            if valor_decimal < float(valor_mayor):
-                return Response(
-                    {"error": "El valor de venta debe ser superior al valor al por mayor."},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-        except ValueError:
-            return Response(
-                {"error": "El 'valor por mayor' debe ser un número válido."},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Agregar el campo 'disponible' según las unidades
-        data['disponible'] = True if int(unidades_disponibles) > 0 else False
-
-        # Validar y guardar los datos con el serializador
-        serializer = self.get_serializer(data=data)
-        if serializer.is_valid():
-            self.perform_create(serializer)
-            headers = self.get_success_headers(serializer.data)
-            return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
-        else:
-            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
+    # La validación del alta vive en ProductModelSerializer.validate(); aquí solo
+    # se asignan tienda y creador. CreateAPIView.create() hace el resto
+    # (is_valid -> 400 con errores por campo, perform_create, 201).
     def perform_create(self, serializer):
-        """Asigna automáticamente la empresa del usuario al producto antes de guardarlo."""
-        company = company_owner(self.request.user)  # Obtener la empresa del usuario
-        serializer.save(creado_por=self.request.user, tienda=company)
+        serializer.save(
+            creado_por=self.request.user,
+            tienda=company_owner(self.request.user),
+        )
 
 
 

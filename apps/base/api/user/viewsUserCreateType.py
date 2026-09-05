@@ -1,6 +1,5 @@
 
 from django.db.models import Q
-from venv import create
 from rest_framework.generics import CreateAPIView,RetrieveAPIView,UpdateAPIView,ListAPIView
 from django.shortcuts import get_object_or_404
 from apps.base.api.user.serializers import ListUserProfileSerializer

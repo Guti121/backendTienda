@@ -1,7 +1,4 @@
-from email.mime import image
-from typing import Required
 from django.utils import timezone
-import time
 from Tienda_Virtual.globalFunctions import company_owner
 from rest_framework import serializers
 from ...models import ProductImage, ProductModel,TypeProductModel
@@ -32,19 +29,38 @@ class ProductModelSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'numero_producto', 'disponible']
 
     def validate(self, data):
-        required_fields = ['nombre', 'tipo_producto', 'detalles', 'valor', 'valor_mayor', 'unidades_disponibles']
-        for field in required_fields:
-            if not data.get(field):
+        """Única fuente de validación del alta de producto.
+
+        Antes esto estaba repartido entre `ProductCreateView.create()` (con
+        `float()` y `try/except` a mano), este `validate()` y `ProductModel.save()`.
+        """
+        for field in ('nombre', 'tipo_producto', 'detalles', 'valor', 'valor_mayor', 'unidades_disponibles'):
+            if data.get(field) in (None, ''):
                 raise serializers.ValidationError({field: f"El campo '{field}' es requerido."})
 
-        if data.get('valor') <= 0:
+        if data['valor'] <= 0:
             raise serializers.ValidationError({"valor": "El valor debe ser mayor a 0."})
-
-        if data.get('valor_mayor') <= 0:
+        if data['valor_mayor'] <= 0:
             raise serializers.ValidationError({"valor_mayor": "El valor mayor debe ser mayor a 0."})
+        if data['valor'] < data['valor_mayor']:
+            raise serializers.ValidationError(
+                {"valor": "El valor de venta debe ser superior al valor al por mayor."}
+            )
+        if data['unidades_disponibles'] <= 0:
+            raise serializers.ValidationError(
+                {"unidades_disponibles": "Las unidades disponibles deben ser mayores a 0."}
+            )
 
-        if data.get('unidades_disponibles') < 0:
-            raise serializers.ValidationError({"unidades_disponibles": "Las unidades disponibles no pueden ser negativas."})
+        # No duplicar el nombre dentro de la misma tienda.
+        request = self.context.get('request')
+        if request is not None:
+            company = company_owner(request.user)
+            if company and ProductModel.objects.filter(
+                tienda=company, nombre__iexact=data['nombre']
+            ).exists():
+                raise serializers.ValidationError(
+                    {"nombre": "Este producto ya existe en la base de datos."}
+                )
 
         return data
 

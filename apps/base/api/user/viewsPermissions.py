@@ -1,71 +1,41 @@
 from rest_framework.permissions import BasePermission
-##Permisos para asceder a las vistas
 
-##Vista solo es de creador
-class isCreator(BasePermission):
-    message = "No tienes permiso para realizar esta acción."
-    def has_permission(self, request, view):
 
-        # Obtener el tipo de usuario de manera segura
-        tipo_usuario = getattr(request.user, 'profile', None)
-        if not tipo_usuario:
-            return False  # Si no tiene perfil, no tiene permiso
-        
-        return request.user.is_authenticated and request.user.profile.tipo_usuario == "creator" and request.user.is_active
+class RolePermission(BasePermission):
+    """Concede acceso si el usuario está autenticado, activo y su
+    `profile.tipo_usuario` está en `allowed_roles`.
 
-##Solo trabajador
-class isWorker(BasePermission):
-    message = "No tienes permiso para realizar esta acción."
-    def has_permission(self, request, view):
-
-        # Obtener el tipo de usuario de manera segura
-        tipo_usuario = getattr(request.user, 'profile', None)
-        if not tipo_usuario:
-            return False  # Si no tiene perfil, no tiene permiso
-        
-        return request.user.is_authenticated and request.user.profile.tipo_usuario == "worker" and request.user.is_active
-
-##Solo Admin
-class isAdmin(BasePermission):
-    message = "No tienes permiso para realizar esta acción."
-    def has_permission(self, request, view):
-        
-        # Obtener el tipo de usuario de manera segura
-        tipo_usuario = getattr(request.user, 'profile', None)
-        if not tipo_usuario:
-            return False  # Si no tiene perfil, no tiene permiso
-        return request.user.is_authenticated and request.user.profile.tipo_usuario == "admin" and request.user.is_active
-
-## trabajador y creador 
-class IsWorkerOrCreator(BasePermission):
-    """
-    Permiso que permite acceso a 'worker' o 'creator'.
+    Las clases de abajo son solo la lista de roles permitida; antes cada una
+    repetía el mismo bloque de comprobaciones.
     """
     message = "No tienes permiso para realizar esta acción."
+    allowed_roles: tuple[str, ...] = ()
 
     def has_permission(self, request, view):
-        
-        # Obtener el tipo de usuario de manera segura
-        tipo_usuario = getattr(request.user, 'profile', None)
-        if not tipo_usuario:
-            return False  # Si no tiene perfil, no tiene permiso
-        return request.user.is_authenticated and request.user.is_active and request.user.profile.tipo_usuario in ["worker", "creator","admin"]
-
-## admin y creador 
-class IsAdminOrCreator(BasePermission):
-    """
-    Permiso que permite acceso a 'worker' o 'creator'.
-    """
-    message = "No tienes permiso para realizar esta acción."
-
-    def has_permission(self, request, view):
-        
-        # Obtener el tipo de usuario de manera segura
-        tipo_usuario = getattr(request.user, 'profile', None)
-        if not tipo_usuario:
-            return False  # Si no tiene perfil, no tiene permiso
-        
-        return request.user.is_authenticated and request.user.is_active and request.user.profile.tipo_usuario in ["creator","admin"]
+        user = getattr(request, "user", None)
+        if not (user and user.is_authenticated and user.is_active):
+            return False
+        profile = getattr(user, "profile", None)
+        return profile is not None and profile.tipo_usuario in self.allowed_roles
 
 
+class isCreator(RolePermission):
+    allowed_roles = ("creator",)
 
+
+class isWorker(RolePermission):
+    allowed_roles = ("worker",)
+
+
+class isAdmin(RolePermission):
+    allowed_roles = ("admin",)
+
+
+class IsWorkerOrCreator(RolePermission):
+    """worker, creator o admin."""
+    allowed_roles = ("worker", "creator", "admin")
+
+
+class IsAdminOrCreator(RolePermission):
+    """creator o admin."""
+    allowed_roles = ("creator", "admin")
