@@ -93,7 +93,6 @@ class ProductModel(BaseModel):
 
         with transaction.atomic():
             if not Bar_codeModel.objects.filter(product=self, tienda=self.tienda).exists():
-                print("Generando código de barras...")
                 self.generarcodigo_barras(self.numero_producto, self.tienda, self.creado_por)
 
     def generate_unique_number(self, max_attempts=50):

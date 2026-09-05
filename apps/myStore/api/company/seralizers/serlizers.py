@@ -8,7 +8,10 @@ from apps.myStore.models import Company
 class CreateCompanySerializer(serializers.ModelSerializer):
     class Meta:
         model = Company
-        fields = '__all__'
+        fields = ['id', 'url_logo', 'nit', 'company', 'name', 'phone',
+                  'email', 'direction', 'municipality', 'creator_user']
+        # El creador se toma del usuario autenticado en la vista, no del body.
+        read_only_fields = ['id', 'creator_user']
 
     def validate_nit(self, value):
         """ Verificar que el NIT no exista """

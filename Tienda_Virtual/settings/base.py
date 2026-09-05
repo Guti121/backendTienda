@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 # Quick-start development settings - unsuitable for production
@@ -24,8 +24,21 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ),
+    # Por defecto TODO exige autenticación. Las vistas públicas (catálogo, login,
+    # registro) lo desactivan explícitamente con permission_classes = [AllowAny] / [].
+    'DEFAULT_PERMISSION_CLASSES': (
+        'rest_framework.permissions.IsAuthenticated',
+    ),
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,  # Number of items per page
+    # Límite de peticiones para el tráfico no autenticado (login, registro,
+    # refresh, catálogo público). Ajustar el rate según tráfico real.
+    'DEFAULT_THROTTLE_CLASSES': (
+        'rest_framework.throttling.AnonRateThrottle',
+    ),
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '60/min',
+    },
 }
 
 SIMPLE_JWT = {
@@ -34,7 +47,6 @@ SIMPLE_JWT = {
     'ROTATE_REFRESH_TOKENS': True,
     'BLACKLIST_AFTER_ROTATION': True,
     'AUTH_HEADER_TYPES': ('Bearer',),
-    'TOKEN_BLACKLIST_MODEL': 'token_blacklist.OutstandingToken',  # ✅ Ensure blacklisting works
 }
 
 
@@ -56,8 +68,8 @@ LOCAL_APPS=[
     'apps.colletion',
     'apps.shoppingcart',
     'apps.inventario',
-    'apps.myStore'
-            
+    'apps.myStore',
+    'apps.catalogo',
 ]
 
 #Aplicaciones de terceros "librerias externas"
@@ -69,9 +81,7 @@ THIRD_APPS=[
     
 ]
 
-INSTALLED_APPS= BASE_APPS + LOCAL_APPS + THIRD_APPS 
-
-TOKEN_EXPIRED_AFTER_SECONDS=900
+INSTALLED_APPS= BASE_APPS + LOCAL_APPS + THIRD_APPS
 
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
@@ -131,13 +141,39 @@ AUTH_PASSWORD_VALIDATORS = [
 # https://docs.djangoproject.com/en/4.2/topics/i18n/
 
 
-LANGUAGE_CODE = 'en-us'
+LANGUAGE_CODE = 'es-co'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'America/Bogota'
 
 USE_I18N = True
 
 USE_TZ = True
+
+
+# Logging: handler de consola para que los logger.info/warning/exception de las
+# apps se vean (antes el código usaba print()).
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'simple': {
+            'format': '{levelname} {asctime} {name} {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple',
+        },
+    },
+    'root': {'handlers': ['console'], 'level': 'INFO'},
+    'loggers': {
+        'django': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'apps': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+        'celery': {'handlers': ['console'], 'level': 'INFO', 'propagate': False},
+    },
+}
 
 
 

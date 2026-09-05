@@ -12,7 +12,6 @@ from rest_framework import status
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from rest_framework.permissions import IsAuthenticated
-from apps.base.api.token.authentication_mixins import Authentication
 from django.db.models import Q
 from django.db.models.functions import Lower
 from rest_framework.exceptions import PermissionDenied
@@ -100,7 +99,6 @@ class TypeProductDestroyAPIView(DestroyAPIView):
         
         Type_product = TypeProductModelDestroySerializer.Meta.model.objects.filter(id=pk,tienda=company).first()
         if Type_product:
-            print(Type_product) 
             Type_product.delete()
             return Response({'message': 'Formularios eliminados correctamente'}, status=status.HTTP_200_OK)
         else:

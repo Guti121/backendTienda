@@ -1,12 +1,11 @@
-from calendar import c
 import random
+from decimal import Decimal, InvalidOperation
 from django.utils import timezone
 from rest_framework import generics
 from rest_framework.generics import DestroyAPIView,ListAPIView
 from Tienda_Virtual.globalFunctions import company_owner, profile_user
 from apps.base.api.user.viewsPermissions import IsAdminOrCreator, IsWorkerOrCreator, isCreator, isWorker
 from apps.colletion.models import ProductImage, ProductModel
-from apps.base.api.token.authentication_mixins import Authentication
 from apps.colletion.api.serializers.serializer import ProductModelListFilterSerializer, ProductModelRetrieveProductCreatorSerializer, ProductModelRetrieveProductSerializer,ProductModelSerializer,ProductModelDestroySerializer, ProductModelUpdateProductSerializer
 from rest_framework.response import Response
 from rest_framework import status
@@ -17,15 +16,38 @@ from django.db.models.functions import Lower
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 
-##Podemos listar los productos en general sin ningun filtro    
+def _productos_de(company):
+    """Queryset base de productos de una tienda, con las relaciones que usan los
+    serializers ya cargadas (evita N+1 por 'tipo_producto' e 'imagenes')."""
+    return (ProductModel.objects
+            .filter(tienda=company)
+            .select_related('tipo_producto')
+            .prefetch_related('imagenes')
+            .order_by('id'))  # orden estable por defecto (paginación determinista)
+
+
+def _busqueda_producto_q(query, incluir_detalles=False):
+    """Condición de búsqueda de producto. 'valor' (Decimal) se compara exacto
+    solo si `query` parsea como número, en lugar de un LIKE que castea toda la
+    columna en cada fila."""
+    cond = Q(nombre__icontains=query) | Q(numero_producto__icontains=query)
+    if incluir_detalles:
+        cond |= Q(detalles__icontains=query)
+    try:
+        cond |= Q(valor=Decimal(query))
+    except (InvalidOperation, TypeError):
+        pass
+    return cond
+
+
+##Podemos listar los productos en general sin ningun filtro
 class ListProductAPIView(ListAPIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated,IsAdminOrCreator]
     serializer_class = ProductModelListFilterSerializer
 
     def get_queryset(self):
-        company = company_owner(self.request.user)
-        return ProductModel.objects.filter(tienda=company)
+        return _productos_de(company_owner(self.request.user))
 
 ##Podemos listar un producto en especifico  
 class ProductRetrieveAPIView(generics.RetrieveAPIView):
@@ -39,9 +61,8 @@ class ProductRetrieveAPIView(generics.RetrieveAPIView):
             return ProductModelRetrieveProductSerializer
 
     def get_queryset(self):
-        company = company_owner(self.request.user)
-        return ProductModel.objects.filter(tienda=company)
-    
+        return _productos_de(company_owner(self.request.user))
+
     def retrieve(self, request, *args, **kwargs):
         pk = kwargs.get("pk")
         try:
@@ -61,20 +82,14 @@ class ProductFilterAdminAPIView(generics.ListAPIView):
 
     def get_queryset(self):
         company = company_owner(self.request.user)
-        queryset = ProductModel.objects.filter(tienda=company).order_by(Lower('nombre'))
-       
-        
+        queryset = _productos_de(company).order_by(Lower('nombre'))
+
         query = self.request.GET.get('q', None)
         if query:
-            queryset = queryset.filter(
-                Q(nombre__icontains=query) | 
-                Q(valor__icontains=query) |
-                Q(numero_producto__icontains=query)
-            )
-            
-        ##filtrar por orden 
+            queryset = queryset.filter(_busqueda_producto_q(query))
+
+        ##filtrar por orden
         filter = self.request.GET.get('order', None)
-        print(type(filter))
         if filter == "0":  # Orden ascendente
             queryset = queryset.filter(unidades_disponibles=0)
         elif filter == "1":  # Orden ascendente de unidades
@@ -110,15 +125,10 @@ class ProductListFilterAPIView( generics.ListAPIView):
 
     def get_queryset(self):
         company = company_owner(self.request.user)
-        queryset = ProductModel.objects.filter(tienda = company ,unidades_disponibles__gt=0,disponible=True)
+        queryset = _productos_de(company).filter(unidades_disponibles__gt=0, disponible=True)
         query = self.request.GET.get('q', None)
         if query:
-            queryset = queryset.filter(
-                Q(nombre__icontains=query) | 
-                Q(detalles__icontains=query) |
-                Q(valor__icontains=query)|
-                Q(numero_producto__icontains=query)
-            )
+            queryset = queryset.filter(_busqueda_producto_q(query, incluir_detalles=True))
         return queryset[:10]
 
     def list(self, request, *args, **kwargs):

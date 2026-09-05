@@ -1,3 +1,4 @@
+import logging
 from django.utils.timezone import localtime  # ✅ El correcto
 from apps.myStore.models import Company
 from celery import shared_task
@@ -8,14 +9,24 @@ from apps.inventario.models import ReporteVentasDiario
 from django.db.models import Sum
 from datetime import timedelta
 
-#Se realizan las funciones que generaran los reportes de las facturas manejados desde celery.py 
-now_local = localtime(timezone.now())
+logger = logging.getLogger(__name__)
+
+#Se realizan las funciones que generaran los reportes de las facturas manejados desde celery.py
+
+def _hoy_local():
+    """Fecha actual en la zona horaria local.
+
+    Se calcula en cada llamada (NO a nivel de módulo): el worker de Celery
+    vive días, así que una variable de módulo quedaría congelada en la fecha
+    de arranque del worker y todos los reportes saldrían con el día equivocado.
+    """
+    return localtime(timezone.now()).date()
 
 #generador de reportes diarios, llamado directamente desde celery.py
 @shared_task
 def generar_reporte_ventas_dia(fecha=None):
-    print("Generando reportes de ventas del día por tienda...")
-    hoy = fecha or now_local.date()
+    logger.info("Generando reportes de ventas del día por tienda...")
+    hoy = fecha or _hoy_local()
 
     inicio_del_dia = datetime.combine(hoy, datetime.min.time(), tzinfo=timezone.get_current_timezone())
     fin_del_dia = datetime.combine(hoy, datetime.max.time(), tzinfo=timezone.get_current_timezone())
@@ -39,7 +50,7 @@ def generar_reporte_ventas_dia(fecha=None):
         reporte_existente = ReporteVentasDiario.objects.filter(fecha=hoy, tienda=tienda).first()
 
         if reporte_existente:
-            print(f"Actualizando reporte para {tienda.company} del día {hoy}...")
+            logger.info(f"Actualizando reporte para {tienda.company} del día {hoy}...")
             reporte_existente.productos_vendidos = reporte['productos_vendidos'] or 0
             reporte_existente.total_valor_mayor_und = reporte['total_valor_mayor_und'] or 0
             reporte_existente.total_valor_con_CF = reporte['total_valor_con_CF'] or 0
@@ -47,7 +58,7 @@ def generar_reporte_ventas_dia(fecha=None):
             reporte_existente.facturas_total = facturas_hoy
             reporte_existente.save()
         else:
-            print(f"Creando reporte para {tienda.company} del día {hoy}...")
+            logger.info(f"Creando reporte para {tienda.company} del día {hoy}...")
             ReporteVentasDiario.objects.create(
                 fecha=hoy,
                 tienda=tienda,
@@ -58,7 +69,7 @@ def generar_reporte_ventas_dia(fecha=None):
                 facturas_total=facturas_hoy
             )
 
-        print(f"Reporte de {tienda.company} para el día {hoy} {'actualizado' if reporte_existente else 'creado'} correctamente.")
+        logger.info(f"Reporte de {tienda.company} para el día {hoy} {'actualizado' if reporte_existente else 'creado'} correctamente.")
 
 
 #Actualiza los reportes cuando se elimina una factura, esta actualizacion ocurres si hay un reporte existente en la misma fecha de la factura eliminada, se llama 
@@ -66,10 +77,10 @@ def generar_reporte_ventas_dia(fecha=None):
 @shared_task
 def generar_reporte_ventas_dia_update(fecha=None, company=None):
     if not fecha or not company:
-        print("⚠️ Parámetros 'fecha' y 'company' son requeridos. Tarea cancelada.")
+        logger.info("⚠️ Parámetros 'fecha' y 'company' son requeridos. Tarea cancelada.")
         return
 
-    print(f"📊 Generando reporte diario para tienda ID {company} en fecha {fecha}...")
+    logger.info(f"📊 Generando reporte diario para tienda ID {company} en fecha {fecha}...")
 
     if isinstance(fecha, datetime):  # Verificamos si es un objeto `datetime`
         hoy = fecha.date()  # Si es `datetime`, extraemos solo la fecha
@@ -82,13 +93,13 @@ def generar_reporte_ventas_dia_update(fecha=None, company=None):
     try:
         tienda = Company.objects.get(id=company)
     except Company.DoesNotExist:
-        print(f"❌ Tienda con ID {company} no existe.")
+        logger.info(f"❌ Tienda con ID {company} no existe.")
         return
 
     # Buscar el reporte existente
     reporte_existente = ReporteVentasDiario.objects.filter(fecha=hoy, tienda=tienda).first()
     if not reporte_existente:
-        print(f"ℹ️ No existe reporte para {tienda.company} del {hoy}, no se realizó ninguna actualización.")
+        logger.info(f"ℹ️ No existe reporte para {tienda.company} del {hoy}, no se realizó ninguna actualización.")
         return
 
     ventas = FacturaDetalle.objects.filter(
@@ -112,7 +123,7 @@ def generar_reporte_ventas_dia_update(fecha=None, company=None):
     reporte_existente.facturas_total = facturas_hoy
     reporte_existente.save()
 
-    print(f"🔄 Reporte actualizado para {tienda.company} del {hoy}.")
+    logger.info(f"🔄 Reporte actualizado para {tienda.company} del {hoy}.")
 
     # Ejecutar también el resumen mensual
     generar_reporte_ventas_mes_update.apply_async(kwargs={
@@ -126,9 +137,9 @@ from apps.inventario.models import ReporteVentasMensual
 
 @shared_task
 def generar_reporte_ventas_mes():
-    print("Generando reportes de ventas mensuales por tienda...")
+    logger.info("Generando reportes de ventas mensuales por tienda...")
 
-    hoy = now_local.date()
+    hoy = _hoy_local()
 
     primer_dia_mes = (hoy.replace(day=1) - timezone.timedelta(days=1)).replace(day=1)
     ultimo_dia_mes = hoy.replace(day=1) - timezone.timedelta(days=1)
@@ -152,7 +163,7 @@ def generar_reporte_ventas_mes():
         reporte_existente = ReporteVentasMensual.objects.filter(fecha=primer_dia_mes, tienda=tienda).first()
 
         if reporte_existente:
-            print(f"Actualizando reporte mensual de {tienda.company} para {primer_dia_mes.strftime('%B %Y')}...")
+            logger.info(f"Actualizando reporte mensual de {tienda.company} para {primer_dia_mes.strftime('%B %Y')}...")
             reporte_existente.productos_vendidos = reporte['productos_vendidos'] or 0
             reporte_existente.total_valor_mayor_und = reporte['total_valor_mayor_und'] or 0
             reporte_existente.total_valor_con_CF = reporte['total_valor_con_CF'] or 0
@@ -160,7 +171,7 @@ def generar_reporte_ventas_mes():
             reporte_existente.facturas_total = reporte['facturas_total'] or 0
             reporte_existente.save()
         else:
-            print(f"Creando reporte mensual de {tienda.company} para {primer_dia_mes.strftime('%B %Y')}...")
+            logger.info(f"Creando reporte mensual de {tienda.company} para {primer_dia_mes.strftime('%B %Y')}...")
             ReporteVentasMensual.objects.create(
                 fecha=primer_dia_mes,
                 tienda=tienda,
@@ -171,12 +182,12 @@ def generar_reporte_ventas_mes():
                 facturas_total=reporte['facturas_total'] or 0
             )
 
-        print(f"Reporte mensual de {tienda.company} para {primer_dia_mes.strftime('%B %Y')} {'actualizado' if reporte_existente else 'creado'} correctamente.")
+        logger.info(f"Reporte mensual de {tienda.company} para {primer_dia_mes.strftime('%B %Y')} {'actualizado' if reporte_existente else 'creado'} correctamente.")
 
 
 @shared_task
 def generar_reporte_ventas_mes_update(fecha=None, tienda_id=None):
-    hoy = fecha or now_local.date()
+    hoy = fecha or _hoy_local()
     if isinstance(hoy, str):
         hoy = datetime.fromisoformat(hoy).date()
 
@@ -188,7 +199,7 @@ def generar_reporte_ventas_mes_update(fecha=None, tienda_id=None):
     try:
         reporte_mensual = ReporteVentasMensual.objects.get(fecha=primer_dia_mes, tienda=tienda)
     except ReporteVentasMensual.DoesNotExist:
-        print(f"No existe reporte mensual para {tienda.company} en {primer_dia_mes.strftime('%Y-%m')}. No se actualiza.")
+        logger.info(f"No existe reporte mensual para {tienda.company} en {primer_dia_mes.strftime('%Y-%m')}. No se actualiza.")
         return
 
     reportes = ReporteVentasDiario.objects.filter(
@@ -207,6 +218,6 @@ def generar_reporte_ventas_mes_update(fecha=None, tienda_id=None):
     for k, v in suma.items():
         setattr(reporte_mensual, k, v or 0)
     reporte_mensual.save()
-    print(f"Actualizado reporte mensual de {tienda.company}")
+    logger.info(f"Actualizado reporte mensual de {tienda.company}")
 
 

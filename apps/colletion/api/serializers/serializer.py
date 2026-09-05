@@ -21,7 +21,15 @@ class ProductModelSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProductModel
-        fields = '__all__'
+        fields = [
+            'id', 'nombre', 'tipo_producto', 'detalles',
+            'valor_mayor', 'valor_costos_fijos', 'valor',
+            'unidades_disponibles', 'disponible', 'publicar',
+            'numero_producto', 'imagenes',
+        ]
+        # numero_producto se genera en el modelo; disponible/tienda/creado_por
+        # los fija el servidor. El cliente no debe poder mandarlos.
+        read_only_fields = ['id', 'numero_producto', 'disponible']
 
     def validate(self, data):
         required_fields = ['nombre', 'tipo_producto', 'detalles', 'valor', 'valor_mayor', 'unidades_disponibles']
@@ -81,10 +89,10 @@ class ProductModelListFilterSerializer(serializers.ModelSerializer):
         return representation
     
     def get_imagen_principal(self, obj):
-        principal = obj.imagenes.filter(principal=True).first()
-        if principal:
-            return principal.imagen.url  # o usa .imagen.name si no quieres la URL completa
-        return None
+        # Recorre en Python el prefetch 'imagenes' (no .filter(), que dispararía
+        # una query por fila y rompería el prefetch_related).
+        principal = next((img for img in obj.imagenes.all() if img.principal), None)
+        return principal.imagen.url if principal else None
 
 
 ##serializador para retrieve product
@@ -165,7 +173,8 @@ class ProductModelUpdateProductSerializer(serializers.ModelSerializer):
 class TypeProductModelSerializer(serializers.ModelSerializer):
     class Meta:
         model = TypeProductModel
-        fields = '__all__'
+        fields = ['id', 'tipo_producto', 'detalles']
+        read_only_fields = ['id']
 
     def validate(self, data):
         # Realiza la validación de los campos requeridos

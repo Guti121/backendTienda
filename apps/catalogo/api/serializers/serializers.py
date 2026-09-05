@@ -15,10 +15,9 @@ class CatalogoProductListSerializer(serializers.ModelSerializer):
 
   
     def get_image_principal(self, obj):
-        principal = obj.imagenes.filter(principal=True).first()
-        if principal:
-            return principal.imagen.url  # or use .imagen.name if you don't want the full URL
-        return None
+        # Recorre en Python el prefetch 'imagenes' (evita el N+1 de .filter()).
+        principal = next((img for img in obj.imagenes.all() if img.principal), None)
+        return principal.imagen.url if principal else None
 
 
 

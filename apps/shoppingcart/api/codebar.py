@@ -9,7 +9,6 @@ from apps.base.api.user.viewsPermissions import IsWorkerOrCreator
 from apps.shoppingcart.api.serializers.serializers import ProductModelFilterSerializer
 from apps.colletion.models import Bar_codeModel
 from rest_framework.permissions import IsAuthenticated
-from rest_framework.authentication import TokenAuthentication
 
 from django.shortcuts import get_object_or_404
 from rest_framework_simplejwt.authentication import JWTAuthentication

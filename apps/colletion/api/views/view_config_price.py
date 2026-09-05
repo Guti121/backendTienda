@@ -104,14 +104,12 @@ class PrecioSugeridoAPIView(APIView):
 
     def post(self, request):
         valor_mayor = request.data.get('valor_mayor')
-        print(valor_mayor)
         if valor_mayor is None or not isinstance(valor_mayor, int):
             return Response({'error': 'Debes ingresar un monto valido'}, status=status.HTTP_400_BAD_REQUEST)
 
         company= company_owner(self.request.user)
 
         datos = Config_ProductModel.objects.filter(disponible=True, tienda=company).first()  # Cambia si necesitas filtrar de otra manera
-        print(datos)
         if not datos:
             return Response({'error': 'Datos no encontrados'}, status=status.HTTP_404_NOT_FOUND)
 

@@ -1,19 +1,33 @@
 from .base  import *
 import os
 from pathlib import Path
+from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 load_dotenv(BASE_DIR/ '.env')
-SECRET_KEY = os.getenv('DJANGO_SECRET_KEY')
 
+
+def _required(name):
+    """Devuelve la variable de entorno o falla con un mensaje claro al arrancar."""
+    value = os.getenv(name)
+    if not value:
+        raise ImproperlyConfigured(f"Falta la variable de entorno obligatoria: {name}")
+    return value
+
+
+def _csv(name):
+    return [item.strip() for item in _required(name).split(',') if item.strip()]
+
+
+SECRET_KEY = _required('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DJANGO_DEBUG","False")=="True"
+DEBUG = os.getenv("DJANGO_DEBUG", "False") == "True"
 
-ALLOWED_HOSTS = os.getenv('DJANGO_ALLOWED_HOSTS').split(',')
+ALLOWED_HOSTS = _csv('DJANGO_ALLOWED_HOSTS')
 
-CORS_ALLOWED_ORIGINS =os.getenv('DJANGO_CORS_ALLOWED_ORIGINS').split(',')
+CORS_ALLOWED_ORIGINS = _csv('DJANGO_CORS_ALLOWED_ORIGINS')
 
 
 # Database
@@ -75,11 +89,10 @@ CELERY_TIMEZONE = 'America/Bogota'  # O la zona horaria que estés usando
 # No es necesario configurar un directorio local con S3
 MEDIA_ROOT = None  	
 #onfiguración de S3
-AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')  # Lo tomas de tu archivo .env
-AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')  # Lo tomas de tu archivo .env
-#AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')  # Lo tomas de tu archivo .env
+AWS_ACCESS_KEY_ID = _required('AWS_ACCESS_KEY_ID')
+AWS_SECRET_ACCESS_KEY = _required('AWS_SECRET_ACCESS_KEY')
 AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', 'us-east-1')  # Cambia por tu región
-AWS_STORAGE_BUCKET_NAME = 'media-stockapp03042025'
+AWS_STORAGE_BUCKET_NAME = _required('AWS_STORAGE_BUCKET_NAME')
 
 
 AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'

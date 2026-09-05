@@ -13,8 +13,11 @@ from datetime import timedelta
 import qrcode
 import io
 import json
+import logging
 from apps.base.api.user.viewsPermissions import IsAdminOrCreator
 import base64
+
+logger = logging.getLogger(__name__)
 
 
 class GenerarQRView(APIView):
@@ -32,7 +35,19 @@ class GenerarQRView(APIView):
         """
         user = request.user
         usuario_email = request.data.get("email")
-        usuario_type = request.data.get("type_user")
+
+        # type_user viaja como 1 (worker) o 2 (admin). Llega como string desde el
+        # cliente; lo normalizamos a int aquí para no arrastrar el bug de comparar
+        # "1" == 1 (siempre falso) al afiliar al usuario.
+        try:
+            usuario_type = int(request.data.get("type_user"))
+        except (TypeError, ValueError):
+            usuario_type = None
+        if usuario_type not in (1, 2):
+            return Response(
+                {"error": "type_user inválido. Usa 1 (trabajador) o 2 (administrador)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Verificar permisos
         if not hasattr(user, "profile") or user.profile.tipo_usuario not in ["admin", "creator"]:
@@ -44,7 +59,6 @@ class GenerarQRView(APIView):
 
         # Crear el token JWT
         token = AccessToken()
-        print(token,'token qr')
         token["company"] = str(company.id)
         token["email"] = usuario_email
         token["type_user"] = usuario_type
@@ -57,7 +71,6 @@ class GenerarQRView(APIView):
             "type": usuario_type,
             "token": str(token)
         })
-        print(token)
         # Generar el QR y convertirlo en base64
         qr = qrcode.make(qr_data)
         buffer = io.BytesIO()
@@ -84,8 +97,7 @@ class LeerQRView(APIView):
             email = access_token["email"]
             usuario_type = access_token["type_user"]
             user= request.user
-            print(access_token,company_id,email,usuario_type,user)
-            
+
             if user.email != email:
                     return Response({"error":'Este Qr no pertenece a este Aliado'},status=status.HTTP_403_FORBIDDEN)
             
@@ -99,7 +111,6 @@ class LeerQRView(APIView):
         
 
         if company_owner(user):
-            print('tiene compañia')
             return Response({"error":'El usuario ya esta afiliado a una compañia'},status=status.HTTP_403_FORBIDDEN)
        
         else:
@@ -121,23 +132,25 @@ class LeerQRView(APIView):
 
             token_data = AccessToken(token)
             company_id = token_data["company"]
-            usuario_type = token_data["type_user"]
+
+            try:
+                usuario_type = int(token_data["type_user"])
+            except (TypeError, ValueError, KeyError):
+                usuario_type = None
+
+            tipos = {1: 'worker', 2: 'admin'}
+            if usuario_type not in tipos:
+                logger.warning("type_user inválido en el token QR: %r", token_data.get('type_user'))
+                return False
 
             profile.company_id = company_id
-
-            # Assuming token_data["type_user"] is an int
-            if usuario_type == 1:
-                profile.tipo_usuario = 'worker'
-            elif usuario_type == 2:
-                profile.tipo_usuario = 'admin'
-            
-
+            profile.tipo_usuario = tipos[usuario_type]
             profile.save()
             return True
 
         except CustomUser.DoesNotExist:
-            print("User not found")
+            logger.warning("add_user_company: usuario %s no encontrado", user_email)
             return False
-        except Exception as e:
-            print(f"Unexpected error: {e}")
+        except Exception:
+            logger.exception("add_user_company: error inesperado")
             return False

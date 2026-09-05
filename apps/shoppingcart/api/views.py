@@ -1,5 +1,7 @@
 
+import logging
 from datetime import datetime
+from decimal import Decimal
 from django.forms import ValidationError
 from rest_framework.generics import CreateAPIView, DestroyAPIView,ListAPIView,RetrieveAPIView
 from rest_framework import serializers  
@@ -11,14 +13,18 @@ from .serializers.serializers import FacturaListSerializer, FacturaSerializer,Fa
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
 from django.core.exceptions import PermissionDenied
+from django.db import transaction
 from rest_framework.response import Response
 from rest_framework import status
 from django.utils.dateparse import parse_date
 from django.utils import timezone
 from babel.numbers import format_currency
-from django.db.models import Sum, F,DecimalField,ExpressionWrapper
+from django.db.models import Sum, Count
 from django.db.models.functions import Coalesce
 from collections import defaultdict
+
+logger = logging.getLogger(__name__)
+
 
 class FacturasCreateView(CreateAPIView):
     serializer_class = FacturaCreateSerializer
@@ -30,53 +36,58 @@ class FacturasCreateView(CreateAPIView):
         return Factura.objects.filter(tienda = company)
 
     def perform_create(self, serializer):
-        
-        company=company_owner(self.request.user)
 
+        company = company_owner(self.request.user)
 
-        # Obtener los detalles de la factura para verificar el stock
         detalles = serializer.validated_data.get('detalles')
         if not detalles:  # Si no envían detalles
-                raise  ValueError('Carrito Vacio')
-        # Agrupar cantidades por producto
+            raise ValueError('Carrito Vacio')
+
+        # Agrupar cantidades por producto (por si el mismo producto viene en
+        # varias líneas del carrito).
         productos_a_procesar = defaultdict(int)
-
         for detalle in detalles:
-            producto = detalle['producto']  # ID del producto
-            producto_id = producto.id
-            cantidad = detalle['cantidad']  # Cantidad solicitada
-            productos_a_procesar[producto_id] += cantidad  # Sumar cantidades por producto
+            productos_a_procesar[detalle['producto'].id] += detalle['cantidad']
 
-        # Verificar que todos los productos tienen el stock suficiente
-        for producto_id, cantidad_solicitada in productos_a_procesar.items():
-            producto = ProductModel.objects.get(id=producto_id, tienda = company)  # Obtén el producto desde la base de datos
+        # Verificación de stock, descuento y creación de la factura dentro de una
+        # sola transacción. `select_for_update()` bloquea las filas de producto
+        # hasta el commit, de modo que dos ventas simultáneas del mismo producto
+        # no puedan dejar el stock negativo (sobreventa).
+        with transaction.atomic():
+            productos = {
+                p.id: p
+                for p in ProductModel.objects
+                    .select_for_update()
+                    .filter(id__in=productos_a_procesar.keys(), tienda=company)
+            }
 
-            # Verificar si hay stock suficiente
-            if producto.unidades_disponibles < cantidad_solicitada or not producto.disponible:
-                raise serializers.ValidationError({
-                    "error":"No hay suficiente stock para el producto ",
-                    "producto_nombre":producto.nombre,
-                    "stock":producto.unidades_disponibles,
-                    "producto_id":producto_id
-                    }
-                )
+            for producto_id, cantidad_solicitada in productos_a_procesar.items():
+                producto = productos.get(producto_id)
+                if producto is None:
+                    raise ProductModel.DoesNotExist(
+                        f"Producto {producto_id} no encontrado en esta tienda."
+                    )
+                if not producto.disponible or producto.unidades_disponibles < cantidad_solicitada:
+                    raise serializers.ValidationError({
+                        "error": "No hay suficiente stock para el producto ",
+                        "producto_nombre": producto.nombre,
+                        "stock": producto.unidades_disponibles,
+                        "producto_id": producto_id,
+                    })
 
-        # Si todos los productos tienen el stock suficiente, proceder a descontar
-        for producto_id, cantidad_solicitada in productos_a_procesar.items():
-            producto = ProductModel.objects.get(id=producto_id,tienda = company)  # Obtener nuevamente el producto
+            for producto_id, cantidad_solicitada in productos_a_procesar.items():
+                producto = productos[producto_id]
+                producto.unidades_disponibles -= cantidad_solicitada
+                if producto.unidades_disponibles == 0:
+                    producto.disponible = False
 
-            # Realizar el descuento de unidades
-            producto.unidades_disponibles -= cantidad_solicitada
-            if producto.unidades_disponibles == 0:
-                producto.disponible = False
+            # bulk_update evita llamar a ProductModel.save() por cada producto
+            # (que regeneraría códigos de barras); solo tocamos las columnas de stock.
+            ProductModel.objects.bulk_update(
+                productos.values(), ['unidades_disponibles', 'disponible']
+            )
 
-            producto.save()
-
-        # Finalmente, guarda el objeto de la factura
-        
-        # Creamos la instancia pero aún no guardamos
-        
-        serializer.save(creado_por=self.request.user, tienda=company)
+            serializer.save(creado_por=self.request.user, tienda=company)
             
     def post(self, request, *args, **kwargs):
             serializer = self.get_serializer(data=request.data)
@@ -94,9 +105,9 @@ class FacturasCreateView(CreateAPIView):
                 }, status=status.HTTP_201_CREATED)
             
             except serializers.ValidationError as e:
-                return Response({"error": e.detail}, status=status.HTTP_404_NOT_FOUND)
+                return Response({"error": e.detail}, status=status.HTTP_400_BAD_REQUEST)
             except ValueError as e:
-                return Response({"error":str(e)}, status=status.HTTP_404_NOT_FOUND)
+                return Response({"error":str(e)}, status=status.HTTP_400_BAD_REQUEST)
             except PermissionDenied as e:
                 return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
             except ProductModel.DoesNotExist as e:
@@ -124,16 +135,11 @@ class FacturasListView(ListAPIView):
         # Obtener el queryset filtrado
         # Obtener parámetros de la solicitud
         month = self.request.query_params.get('month', None)
-        print(month,'este es el valor de month')
         year = self.request.query_params.get('year', None)
-        print(year,'este es el valor de year')
         date_str = self.request.query_params.get('date', None)
-        print(date_str,'este es el valor de date')
-        
-       
+
         # Filtrar por mes y año si se pasan ambos parámetros
         if month and year:
-            print(month)
             queryset = queryset.filter(fecha__year=year, fecha__month=month)
             return queryset
         
@@ -151,9 +157,7 @@ class FacturasListView(ListAPIView):
             except (ValueError, TypeError):
                 return queryset.none()  # Evita error 500 y solo devuelve una lista vacía
         else:
-            print('entre else')
             current_date = timezone.now()
-            print('current',current_date)
             queryset = queryset.filter(fecha__year=current_date.year, fecha__month=current_date.month)
             return queryset
             
@@ -161,70 +165,27 @@ class FacturasListView(ListAPIView):
         
 
     def list(self, request, *args, **kwargs):
-        # Obtener el queryset filtrado
         queryset = self.get_queryset()
-
-        # Calcular el total de las facturas
-        
-
-        # Serializar los datos
         serializer = self.get_serializer(queryset, many=True)
-        print(queryset.values('total'))  # Esto mostrará los valores de `total` antes de la agregación.
 
-        
-        totales = queryset.aggregate(
-            total_cantidad=Coalesce(Sum(F('detalles__cantidad')), 0),
-            total_x_mayor=Coalesce(Sum(ExpressionWrapper(
-                F('detalles__producto__valor_mayor') * F('detalles__cantidad'),
-                output_field=DecimalField()
-            )),0, output_field=DecimalField()),
-            total_x_mayor_cf=Coalesce(Sum(ExpressionWrapper(
-                F('detalles__producto__valor_costos_fijos') * F('detalles__cantidad'),
-                output_field=DecimalField()
-            )),0, output_field=DecimalField())
+        # Nº de facturas y suma de 'total' se calculan SIN join (si se pusiera
+        # Sum('detalles__cantidad') en el mismo aggregate, el join inflaría el
+        # total repitiendo cada factura por cada detalle).
+        resumen = queryset.aggregate(
+            numero=Count('id'),
+            total=Coalesce(Sum('total'), Decimal('0.00')),
         )
-        print(totales)
-        total_facturas,ganancia,ganancia_cf=self.total_facturas(queryset,totales['total_x_mayor'],totales['total_x_mayor_cf'])
-        
-        total_facturas_cop = format_currency(total_facturas, 'COP', locale='es_CO')
-        """
-        total_x_mayor_cop = format_currency(totales['total_x_mayor'], 'COP', locale='es_CO')
-        total_x_mayor_cf_cop = format_currency(totales['total_x_mayor_cf'],'COP',locale='es_CO')
-        total_ganancia_cop = format_currency(ganancia, 'COP', locale='es_CO')
-        total_ganancia_cf_cop = format_currency(ganancia_cf, 'COP', locale='es_CO')
-        total_solo_cf=format_currency(ganancia-ganancia_cf,'COP', locale='es_CO')
+        total_cantidad = queryset.aggregate(
+            c=Coalesce(Sum('detalles__cantidad'), 0)
+        )['c']
 
-        'Total precio x mayor':total_x_mayor_cop,
-            'Total precio x mayor cf':total_x_mayor_cf_cop,
-            'Total Ganancia sin CF':total_ganancia_cop,
-            'Total Ganancia cf':total_ganancia_cf_cop,
-            'Total Cfs cubierto':total_solo_cf,"""
-        # Devolver la respuesta con el total y las facturas serializadas
         return Response({
-            'numero_de_facturas': len(queryset),
-            
-            'total_cantidad_de_procuctos':totales['total_cantidad'],
-            'total_facturas': total_facturas_cop,
-            
-
-
-            'facturas': serializer.data
+            'numero_de_facturas': resumen['numero'],
+            'total_cantidad_de_procuctos': total_cantidad,
+            'total_facturas': format_currency(resumen['total'], 'COP', locale='es_CO'),
+            'facturas': serializer.data,
         }, status=status.HTTP_200_OK)
 
-    def total_facturas(self,queryset,x_mayor,x_mayor_cf):
-        total=0.0
-        ganancia=0.0
-
-        for factura in queryset:
-            total+=float(factura.total)
-        print('total',total)
-        ganancia=float(total)-float(x_mayor)
-        print('total',total)
-        ganancia_cf=float(total)-float(x_mayor_cf)
-        
-        
-        return total,ganancia,ganancia_cf
-    
 
 
 # Para obtener una sola factura con sus detalles
@@ -236,8 +197,11 @@ class FacturasDetailView(RetrieveAPIView):
 
     def get_queryset(self):
         company=company_owner(self.request.user)
-        queryset = Factura.objects.filter(tienda=company)
-        return queryset
+        return (Factura.objects
+                .filter(tienda=company)
+                .select_related('creado_por', 'tienda')
+                .prefetch_related('detalles__producto'))
+
     def get(self, request, *args, **kwargs):
              return super().get(request, *args, **kwargs)
 
@@ -267,8 +231,8 @@ class FacturaDestroyView(DestroyAPIView):
                     if producto.unidades_disponibles != 0:
                         producto.disponible = True
                     producto.save()
-                except Exception as e:
-                    print(f"Error al actualizar producto {producto.id}: {str(e)}")
+                except Exception:
+                    logger.exception("Error al reponer stock del producto %s", producto.id)
     
         instance.delete()
 

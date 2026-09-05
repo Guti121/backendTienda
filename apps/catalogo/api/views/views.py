@@ -23,7 +23,10 @@ class CatalogoListView(ListAPIView):
             raise ValidationError(detail="El parámetro 'name' es obligatorio.")
 
         tienda = get_object_or_404(Company, name__iexact=name_param)
-        queryset = ProductModel.objects.filter(disponible=True, publicar=True, tienda=tienda)
+        queryset = (ProductModel.objects
+                    .filter(disponible=True, publicar=True, tienda=tienda)
+                    .select_related('tipo_producto')
+                    .prefetch_related('imagenes'))
 
         # Filtro por tipo de producto
         if tipo_param:
@@ -55,7 +58,10 @@ class CatalogoProductRetrieveView(RetrieveAPIView):
             raise ValidationError(detail="Los parámetros 'name' e 'id' son obligatorios.")
 
         tienda = get_object_or_404(Company, name__iexact=name_param)
-        product = get_object_or_404(ProductModel, id=product_id, tienda=tienda, disponible=True, publicar=True)
+        product = get_object_or_404(
+            ProductModel.objects.select_related('tipo_producto').prefetch_related('imagenes'),
+            id=product_id, tienda=tienda, disponible=True, publicar=True,
+        )
         
         if not product:
             raise ValidationError(detail="Producto no encontrado o no disponible.")

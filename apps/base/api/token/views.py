@@ -1,6 +1,6 @@
 
 from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework.authtoken.views import APIView
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework import status
 
@@ -28,6 +28,8 @@ class CustomTokenObtainPairView(TokenObtainPairView):
     
 
 class LogoutView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request):
         try:
             refresh_token = request.data["refresh"]
@@ -42,6 +44,8 @@ class LogoutView(APIView):
 
 
 class RegisterUserView(APIView):
+    permission_classes = [AllowAny]
+
     def post(self, request, *args, **kwargs):
         serializer = UserSerializer(data=request.data)
         

@@ -36,13 +36,11 @@ class CompanyCreateAPIView(CreateAPIView):
             return Response({'error': 'Es posible que estes vinculado a una compañia.'}, status=status.HTTP_403_FORBIDDEN)
         
 
-        # Crear la empresa y asignar el usuario como creador
-        data = request.data.copy()
-        data['creator_user'] = user.id  # Asigna al usuario autenticado como creador
-
-        serializer = self.get_serializer(data=data)
+        # Crear la empresa; el creador se fija desde el usuario autenticado
+        # (creator_user es read_only en el serializer).
+        serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
-            company = serializer.save()
+            company = serializer.save(creator_user=user)
 
             # Actualizar el perfil del usuario: cambiar a "creator" y vincular la empresa
             user_profile.tipo_usuario = TipoUsuario.CREATOR
