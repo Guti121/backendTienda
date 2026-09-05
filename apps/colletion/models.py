@@ -79,21 +79,29 @@ class ProductModel(BaseModel):
 
     def save(self, *args, **kwargs):
         # Capitalizar el nombre antes de guardar
-        self.nombre = self.nombre.title()  
+        self.nombre = self.nombre.title()
 
         # Validar que tienda esté definida antes de guardar
         if not self.tienda:
             raise ValueError("El campo 'tienda' es obligatorio.")
-       
+
         # Si no tiene número de producto, generarlo
         if not self.numero_producto:
             self.numero_producto = self.generate_unique_number()
 
         super().save(*args, **kwargs)
 
-        with transaction.atomic():
-            if not Bar_codeModel.objects.filter(product=self, tienda=self.tienda).exists():
-                self.generarcodigo_barras(self.numero_producto, self.tienda, self.creado_por)
+        # La generación del código de barras (render PNG + subida a almacenamiento)
+        # se hace en una tarea Celery, ya con el producto commiteado. En local
+        # (CELERY_TASK_ALWAYS_EAGER) corre en el acto; en prod, en el worker.
+        if not Bar_codeModel.objects.filter(product=self).exists():
+            product_id = self.pk
+
+            def _encolar():
+                from apps.colletion.tasks import generar_codigo_barras_task
+                generar_codigo_barras_task.delay(product_id)
+
+            transaction.on_commit(_encolar)
 
     def generate_unique_number(self, max_attempts=50):
         """Genera un número único de producto, verificando que no se repita en la misma tienda."""
@@ -106,31 +114,36 @@ class ProductModel(BaseModel):
         raise ValueError("No se pudo generar un número de producto único. Inténtelo de nuevo.")
             
     
-    def generarcodigo_barras(self, numero_producto,tienda,creado_por):
+    def crear_codigo_barras(self):
+        """Genera y guarda el Bar_codeModel EAN-13 de este producto.
+
+        Llamada desde `generar_codigo_barras_task` (Celery). Idempotente: si ya
+        existe un código para el producto, no hace nada.
+        """
+        if Bar_codeModel.objects.filter(product=self).exists():
+            return
+
         codigo_pais = "770"
         codigo_fabricante = "0123"
-        codigo_producto = numero_producto
-        
-        # Crea el código sin control (sin el dígito de control)
-        codigo_sin_control = codigo_pais + codigo_fabricante + codigo_producto
-        
-        # Crea el objeto EAN-13, que automáticamente calculará el dígito de control
+        codigo_sin_control = codigo_pais + codigo_fabricante + self.numero_producto
+
+        # EAN-13 calcula solo el dígito de control
         ean = barcode.get("ean13", codigo_sin_control, writer=ImageWriter())
 
-        # Guardar la imagen de código de barras en un archivo en memoria
         buffer = BytesIO()
         ean.write(buffer, {'format': 'PNG'})
         buffer.seek(0)
 
-        # Crear el objeto Bar_codeModel y guardarlo
-        barcode_instance = Bar_codeModel(
+        Bar_codeModel.objects.create(
             product=self,
-            barcode=ContentFile(buffer.read(), name=f"barcode_{codigo_sin_control}_{tienda.name}.png"),  # Usar el código completo para el nombre del archivo
-            code=ean.get_fullcode(),  # Guarda el código completo, incluyendo el dígito de control
-            tienda=tienda,
-            creado_por=creado_por
+            barcode=ContentFile(
+                buffer.read(),
+                name=f"barcode_{codigo_sin_control}_{self.tienda.name}.png",
+            ),
+            code=ean.get_fullcode(),
+            tienda=self.tienda,
+            creado_por=self.creado_por,
         )
-        barcode_instance.save()  # Guardar el código de barras en la base de datos
 
 
     def __str__(self):

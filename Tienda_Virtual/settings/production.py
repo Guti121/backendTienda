@@ -77,14 +77,8 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 
 
-# Configuración de Celery
-CELERY_BROKER_URL = 'redis://localhost:6379/0'   # Usamos Redis como broker
-CELERY_ACCEPT_CONTENT = ['json']
-CELERY_TASK_SERIALIZER = 'json'
-CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'  # También Redis para almacenar resultados
-CELERY_TIMEZONE = 'America/Bogota'  # O la zona horaria que estés usando
-
-
+# Celery: la config base está en base.py (broker/backend por env, default Redis
+# local). Aquí no hace falta nada salvo, si se quiere, sobreescribir por env.
 
 # No es necesario configurar un directorio local con S3
 MEDIA_ROOT = None  	
