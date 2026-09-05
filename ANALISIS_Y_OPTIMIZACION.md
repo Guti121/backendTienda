@@ -765,6 +765,16 @@ y `FacturasListView` filtrando por `fecha__gte` / `fecha__lt` (no depende de las
 tz tables y usa índice). *Recomendado igualmente* cargar las tz tables de MySQL
 (`https://dev.mysql.com/downloads/timezones.html`) para cualquier otro uso.
 
+**Aislamiento multi-tenant — verificado a fondo** (commits `8c1d3cd` E2E + suite):
+20/20 checks E2E contra MySQL y **18 tests unitarios** (`apps/base/tests/test_multitenant.py`).
+Un usuario de la empresa A recibe 404/403/400 y no muta nada al intentar, contra
+objetos de la empresa B: `GET/PATCH/DELETE` de producto, `barcode`, tipo de
+producto, `GET/DELETE` de factura, facturar un producto ajeno, leer un código de
+barras ajeno, listar/expulsar usuarios ajenos, `retrieve/update` de empresa,
+`retrieve/destroy` de config de precios, y catálogo público cruzado. El
+aislamiento se apoya en que **cada `get_queryset()` filtra por `tienda=company_owner(user)`**
+(no hay middleware que lo garantice — cualquier vista nueva debe repetir el filtro).
+
 ---
 
 ## 11. Checklist accionable
