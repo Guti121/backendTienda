@@ -500,21 +500,39 @@ GET    /catalogo/company/<name>         (público)
 | 0.4 | `ValidationError`/`ValueError` → HTTP 404 al facturar | `shoppingcart/api/views.py::FacturasCreateView.post` | Ambos `except` devuelven `400`. | ✅ hecho |
 | 0.5 | `CreateParametrosSerializer.validate/create` dentro de `Meta` | `colletion/api/serializers/serializer_config.py` | `validate` movido al serializer y ahora hace `return data`; `create` redundante eliminado (era el de `ModelSerializer`). | ✅ hecho |
 | 0.6 | `django-storages` y `boto3` ausentes | `requirements.txt` | Añadidos `django-storages==1.14.6` (ya en el venv) y `boto3>=1.34,<2.0`. **Falta `pip install boto3` en el venv.** | ✅ hecho (pendiente instalar) |
-| 0.7 | Migraciones ignoradas por git + set local a medias | `.gitignore`, `apps/*/migrations/` | Ver nota. **La BD local tiene datos → NO regenerar de cero.** | ⏳ pendiente |
+| 0.7 | Migraciones ignoradas por git + historia rota | `.gitignore`, `apps/*/migrations/` | Consolidadas (ver nota). Falta aplicar en la BD real. | ✅ hecho (falta `migrate` en la BD real) |
 | 0.8 | `type_user` string vs int en QR | `myStore/api/qrCode.py` | `GenerarQRView` valida `int(type_user) in (1,2)` antes de emitir el QR; `add_user_company` parsea con `int()` y mapea `{1:'worker',2:'admin'}`, devolviendo `False` si es inválido. Se quitaron 2 `print(token)`. | ✅ hecho |
 
-**Nota 0.7 (enfoque corregido).** Como la BD local ya tiene datos aplicados, no
-se puede hacer `makemigrations` desde cero. El camino seguro:
-1. Restaurar las migraciones borradas que sí están en `HEAD`
-   (`git checkout -- apps/*/migrations/`), para no perder historia ya aplicada.
-2. Añadir la nueva `apps/colletion/migrations/0002_alter_productimage_imagen.py`
-   (hoy *untracked*) al repo.
-3. Editar `.gitignore`: quitar `*/migrations/*.py` (dejar solo la exclusión de
-   `__pycache__`) para que las migraciones se versionen a partir de ahora.
-4. `python manage.py migrate --plan` en la máquina del autor para confirmar que el
-   estado de la BD y el árbol de migraciones coinciden.
-Esto se hará en una sesión aparte con acceso a la BD real; por ahora el working
-tree se deja como está.
+**Nota 0.7 — resuelto (commits `521ac89` + `5478605`).** La historia commiteada
+estaba **rota**: `colletion/0005` dependía de `colletion/0004_productmodel_publicar`,
+borrada del repo → el grafo no se podía construir. El squash local (que estaba
+sin commitear) sí era consistente, así que se adoptó:
+
+- Cada app queda con `0001_initial` regenerado (esquema actual completo);
+  intermedias eliminadas. `colletion` suma `0002_alter_productimage_imagen`
+  (`upload_to` string → función) y `0003_...` (índices).
+- `.gitignore`: fuera `*/migrations/*.py` — las migraciones se versionan.
+- Verificado: `migrate` sobre BD nueva aplica todo limpio; `makemigrations
+  --check` = "No changes detected"; la suite (40 tests) en verde.
+
+**Falta correr en la BD real** (tiene datos, ya tiene las migraciones viejas
+aplicadas por nombre):
+```bash
+mysqldump -u USER -p DBNAME > backup_$(date +%F).sql   # 1. BACKUP
+python manage.py migrate --plan                          # 2. revisar
+python manage.py migrate                                 # 3. aplicar
+```
+Paso 3 aplica solo `colletion.0002_alter_productimage_imagen` (AlterField de
+`upload_to`, sin cambio de esquema), `colletion.0003` e `inventario.0002`
+(`CREATE INDEX`); el resto ya consta aplicado por nombre. Si diera
+`InconsistentMigrationHistory`:
+```bash
+python manage.py migrate --fake base 0002_initial
+python manage.py migrate --fake colletion 0001_initial
+python manage.py migrate
+```
+Las filas huérfanas en `django_migrations` (nombres de las migraciones borradas)
+no molestan; se pueden limpiar con un `DELETE` más adelante.
 
 ### Fase 1 — Seguridad
 
@@ -594,10 +612,12 @@ ajustarlo o volver a exponerlo como `read_only`.
   usan el accesor `user.profile` (cacheado en la instancia por Django) en vez de
   un `get_object_or_404(UserProfile, ...)` nuevo en cada llamada. 3 llamadas por
   request pasan de ~6 queries a 2. Se conserva el `Http404` si no hay perfil.
-- ⏳ **Índices** (`db_index` / `Meta.indexes` en `ProductModel(tienda,nombre)`,
-  `numero_producto`, `Bar_codeModel.code`, `ReporteVentasDiario(tienda,fecha)`,
-  `FacturaDetalle.factura`): **diferido a la sesión de migraciones** (junto con
-  0.7), que es cuando se correrá `migrate` contra la BD real.
+- ✅ **Índices** (commit `5478605`, migraciones `colletion/0003` + `inventario/0002`):
+  `Bar_codeModel.code` (lectura por scanner), `ProductModel.numero_producto`
+  (chequeo de unicidad), `ProductModel(tienda, nombre)` y
+  `ReporteVentasDiario/Mensual(tienda, fecha)` como índices compuestos.
+  (`FacturaDetalle.factura` ya estaba indexado: Django indexa las FK.) Falta
+  `migrate` en la BD real (ver Nota 0.7).
 - ⏳ **Código de barras a Celery**: **diferido a Fase 3**, en bloque con la
   unificación de la config de Celery + `CELERY_TASK_ALWAYS_EAGER` en local +
   comando `backfill_barcodes`. Hacerlo antes obliga a configurar Celery a medias.
@@ -618,8 +638,9 @@ ajustarlo o volver a exponerlo como `read_only`.
   → las tareas corren en el acto, sin Redis ni worker, en desarrollo. Un clon
   nuevo lo obtiene poniendo `CELERY_TASK_ALWAYS_EAGER=True` en su `.env`.
 - ✅ **Beat schedule**: fuente única = el dict en `celery.py` (versionado).
-  `django_celery_beat` queda instalado pero sin usar (quitarlo toca la BD → se
-  hace en la sesión de migraciones).
+  `django_celery_beat` **queda instalado a propósito**: quitarlo dejaría ~19
+  filas huérfanas en `django_migrations` y ~10 tablas sin uso en la BD real, más
+  desorden del que resuelve. Se deja como está.
 - ✅ **Código de barras asíncrono**: `ProductModel.save()` ya no renderiza el PNG
   ni lo sube en la request; encola `apps/colletion/tasks.py::generar_codigo_barras_task`
   vía `transaction.on_commit` (idempotente, tolera producto borrado, 3 reintentos).
@@ -716,7 +737,8 @@ ajustarlo o volver a exponerlo como `read_only`.
 - ⏳ **Actualizar dependencias**: Dependabot marca ~49 vulnerabilidades en los
   pins de `requirements.txt`. Merece una pasada dedicada (subir Django a la
   última 5.1.x, DRF, simplejwt, pillow, etc. y correr la suite).
-- ⏳ `makemigrations --check` en CI: pendiente de la sesión de migraciones (0.7).
+- ✅ `makemigrations --check --dry-run` añadido al CI (ya que las migraciones
+  quedaron consistentes).
 - ⏳ `django-environ`, logging JSON, Sentry, `ruff`/`black` en CI: nice-to-have.
 
 ---
@@ -729,7 +751,7 @@ ajustarlo o volver a exponerlo como `read_only`.
 - [x] 0.4 Código HTTP correcto en errores de facturación
 - [x] 0.5 Arreglar `CreateParametrosSerializer`
 - [x] 0.6 `boto3` + `django-storages` en requirements *(falta `pip install boto3`)*
-- [ ] 0.7 Versionar migraciones *(pendiente; requiere acceso a la BD real)*
+- [x] 0.7 Migraciones consolidadas + versionadas (commits `521ac89`/`5478605`); **falta `migrate` en la BD real** (ver Nota 0.7)
 - [x] 0.8 Normalizar `type_user` del QR
 - [x] 1.x Quitar `fields='__all__'`, `print()`, añadir throttling y permisos por defecto
 - [x] 1.x Borrar auth por Token legado
@@ -737,12 +759,11 @@ ajustarlo o volver a exponerlo como `read_only`.
 - [ ] 1.x `wsgi.py` → `settings.production` (diferido: P1 no se despliega)
 - [x] 2.x `select_related`/`prefetch_related` en listados + serializers (N+1 fuera)
 - [x] 2.x Totales de facturas sin JOIN triple; `company_owner` cacheado; búsqueda `valor` sin cast
-- [ ] 2.x Índices de BD *(diferido: sesión de migraciones)*
-- [ ] 2.x Código de barras en Celery *(diferido: Fase 3)*
+- [x] 2.x Índices de BD (commit `5478605`)
 - [x] 3.x Config Celery en `base.py` + `CELERY_TASK_ALWAYS_EAGER` + `.env.example`
 - [x] 3.x Código de barras → Celery (`transaction.on_commit`) + `backfill_barcodes`
 - [ ] 3.x S3 a `base.py` con toggle + split de `requirements/` *(diferido)*
-- [ ] 3.x Quitar `django_celery_beat` *(diferido: sesión de migraciones)*
+- [~] 3.x `django_celery_beat`: se decide **mantenerlo** (quitarlo ensucia más la BD)
 - [x] 4.x Permisos unificados (`RolePermission`) + validación de producto única en el serializer + `BaseModel.save()` muerto fuera + imports basura
 - [ ] 4.x Capa de servicios (`services.py`) *(diferido)*
 - [ ] 4.x Renombrar apps/archivos con typos *(diferido: sesión de migraciones)*

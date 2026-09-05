@@ -31,9 +31,8 @@ jobs:
       - name: Django system check
         run: python manage.py check
 
+      - name: Migraciones al día
+        run: python manage.py makemigrations --check --dry-run
+
       - name: Tests
         run: python manage.py test -v 2
-
-      # Cuando las migraciones estén consolidadas (punto 0.7 del .md), añadir:
-      #   - name: Migraciones al día
-      #     run: python manage.py makemigrations --check --dry-run
