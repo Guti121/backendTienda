@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: ["main", "optimizacion/**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      DJANGO_SETTINGS_MODULE: Tienda_Virtual.settings.test
+      DJANGO_SECRET_KEY: ci-secret-key
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Dependencias del sistema (zbar para pyzbar, cliente MySQL)
+        run: sudo apt-get update && sudo apt-get install -y libzbar0 default-libmysqlclient-dev
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Django system check
+        run: python manage.py check
+
+      - name: Tests
+        run: python manage.py test -v 2
+
+      # Cuando las migraciones estén consolidadas (punto 0.7 del .md), añadir:
+      #   - name: Migraciones al día
+      #     run: python manage.py makemigrations --check --dry-run

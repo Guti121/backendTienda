@@ -677,21 +677,47 @@ ajustarlo o volver a exponerlo como `read_only`.
 
 ### Fase 5 — Calidad y observabilidad
 
-- **Tests**: hoy todos los `tests.py` están vacíos. Empezar por los flujos de
-  dinero/stock:
-  - facturar descuenta stock y bloquea sobreventa (incluida la concurrencia);
-  - borrar factura repone stock;
-  - tareas de reporte diario/mensual con fechas controladas (`freezegun`);
-  - aislamiento multi-tenant (un `creator` no ve datos de otra tienda);
-  - permisos por rol en cada endpoint.
-- `pytest` + `pytest-django` + `factory_boy` + `coverage`.
-- **Documentación de API**: `drf-spectacular` (OpenAPI/Swagger) — hoy no hay.
-- `logging` estructurado (JSON) y captura de errores (Sentry) en lugar de `print`.
-- CI (GitHub Actions): `ruff`/`flake8`, `black`, `python manage.py check --deploy`,
-  `makemigrations --check`, `pytest`.
-- `django-environ` para tipado y validación de variables de entorno.
-- Añadir `python manage.py check --deploy` a la rutina de release
-  (avisará de `DEBUG`, cookies, HSTS, `SECRET_KEY`, etc.).
+> **Estado (2026-09-05):** suite de tests real + CI aplicados. **40 tests en
+> verde** con `manage.py test --settings=Tienda_Virtual.settings.test`.
+
+- ✅ **Suite de tests en el repo** (antes todos los `tests.py` vacíos). Se
+  reemplazaron por paquetes `apps/<app>/tests/`:
+  - `apps/base/tests/factories.py` — helpers compartidos (`make_company`,
+    `make_product`, `make_user`, `png_file`).
+  - `apps/base/tests/` — `RolePermission` por rol (creator/worker/admin/anónimo/
+    inactivo); auth (401 por defecto, registro y catálogo públicos); caché de
+    `company_owner`.
+  - `apps/colletion/tests/` — validación del alta de producto (todos los casos,
+    ahora en el serializer); `numero_producto`/`disponible` read-only; **N+1 del
+    listado** (queries constantes con 2 vs 6 productos); búsqueda por `valor`;
+    `CreateParametrosSerializer.validate`; **código de barras** (tarea genera /
+    idempotente / producto inexistente / `on_commit` / comando `backfill`).
+  - `apps/shoppingcart/tests/` — venta descuenta stock / stock exacto →
+    `disponible=False` / **sobreventa → 400 con rollback** / carrito vacío /
+    líneas repetidas; totales de `FacturasListView` sin inflar por el join.
+  - `apps/myStore/tests/` — QR `type_user` (rechazo/aceptación/mapeo);
+    `creator_user` read-only; cliente → creator al crear empresa.
+  - `apps/inventario/tests/` — `_hoy_local()` dinámico.
+- ✅ **`Tienda_Virtual/settings/test.py`**: SQLite en memoria, Celery eager,
+  hash de contraseñas rápido, media a temp, logs a WARNING.
+- ✅ **`apps/__init__.py`** añadido — sin él, el descubrimiento de tests no
+  bajaba a los paquetes `tests/` (`apps` era namespace package).
+- ✅ **CI** (`.github/workflows/ci.yml`): en cada push/PR instala deps del SO
+  (`libzbar0`, `default-libmysqlclient-dev`) + `requirements.txt`, corre
+  `manage.py check` y la suite con `settings.test`.
+- ✅ **`README.md`**: puesta en marcha, settings, tests, Celery, comandos.
+- ✅ **`.gitignore`** saneado: dejaba de versionar `base.py`/`wsgi.py`/`manage.py`
+  (que sí deben estar); ahora solo ignora `settings/local.py` (por-desarrollador).
+- ⏳ **`drf-spectacular` (OpenAPI/Swagger)**: pendiente. No está en el venv y
+  meterlo sin poder verificarlo rompería `manage.py` hasta hacer `pip install`.
+  Al retomar: `pip install drf-spectacular`, añadir `'drf_spectacular'` a
+  `THIRD_APPS`, `REST_FRAMEWORK['DEFAULT_SCHEMA_CLASS'] =
+  'drf_spectacular.openapi.AutoSchema'` y las rutas `/api/schema/` + `/api/docs/`.
+- ⏳ **Actualizar dependencias**: Dependabot marca ~49 vulnerabilidades en los
+  pins de `requirements.txt`. Merece una pasada dedicada (subir Django a la
+  última 5.1.x, DRF, simplejwt, pillow, etc. y correr la suite).
+- ⏳ `makemigrations --check` en CI: pendiente de la sesión de migraciones (0.7).
+- ⏳ `django-environ`, logging JSON, Sentry, `ruff`/`black` en CI: nice-to-have.
 
 ---
 
@@ -720,7 +746,9 @@ ajustarlo o volver a exponerlo como `read_only`.
 - [x] 4.x Permisos unificados (`RolePermission`) + validación de producto única en el serializer + `BaseModel.save()` muerto fuera + imports basura
 - [ ] 4.x Capa de servicios (`services.py`) *(diferido)*
 - [ ] 4.x Renombrar apps/archivos con typos *(diferido: sesión de migraciones)*
-- [ ] 5.x Tests de stock/reportes/multi-tenant + OpenAPI + CI
+- [x] 5.x Suite de tests real (40, verde) + `settings/test.py` + CI + README + `.gitignore` saneado
+- [ ] 5.x OpenAPI (`drf-spectacular`) *(pendiente: requiere `pip install`)*
+- [ ] 5.x Actualizar dependencias (Dependabot: ~49 vulnerabilidades)
 
 ---
 

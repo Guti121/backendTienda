@@ -11,14 +11,14 @@ ENV/
 .env
 
 
-# Developmen 
+# Development
 celerybeat-schedule
 8000
+
+# settings/local.py es por-desarrollador (DB local, IPs, CELERY_TASK_ALWAYS_EAGER).
+# base.py / production.py / test.py / wsgi.py / manage.py SÍ se versionan.
 /Tienda_Virtual/settings/local.py
-/Tienda_Virtual/settings/base.py
-/Tienda_Virtual/wsgi.py
-manage.py
-/Tienda_Virtual/settings
+
 # Django stuff
 *.pot
 *.pyc
