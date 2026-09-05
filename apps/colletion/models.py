@@ -71,8 +71,13 @@ class ProductModel(BaseModel):
     valor = models.DecimalField(max_digits=10, decimal_places=2,blank=False)
     unidades_disponibles = models.PositiveIntegerField()
     disponible = models.BooleanField(default=True)
-    numero_producto = models.CharField(max_length=5, unique=False, null=False, blank=True)
+    numero_producto = models.CharField(max_length=5, unique=False, null=False, blank=True, db_index=True)
     publicar = models.BooleanField(default=False)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=['tienda', 'nombre']),
+        ]
 
     def imagen_principal(self):
         return self.imagenes.filter(principal=True).first()
@@ -153,7 +158,7 @@ class ProductModel(BaseModel):
 class Bar_codeModel(BaseModel):
     product = models.OneToOneField("colletion.ProductModel",related_name="producto", on_delete=models.CASCADE)
     barcode = models.ImageField(upload_to='barcodes/', null=True, blank=True)
-    code =models.CharField(max_length=13, null=False, blank=False) 
+    code = models.CharField(max_length=13, null=False, blank=False, db_index=True)  # lectura por scanner
 
     
     
