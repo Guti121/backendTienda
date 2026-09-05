@@ -80,3 +80,23 @@ class FacturaListTotalesTest(TestCase):
         self.assertEqual(r.data["total_cantidad_de_procuctos"], 5)
         digits = "".join(ch for ch in r.data["total_facturas"] if ch.isdigit())
         self.assertEqual(digits, "500000")  # 5000,00 COP
+
+    def test_filtro_por_mes_y_por_fecha(self):
+        # El filtro usa rangos [inicio, fin), no fecha__year/__month (que en MySQL
+        # sin tablas de timezone devuelven vacío).
+        import datetime as dt
+        p = make_product(self.company, self.creador, stock=20, valor="1000")
+        self.client.post("/facturas/create/",
+                         {"detalles": [{"producto": p.id, "cantidad": 1}]}, format="json")
+        hoy = dt.date.today()
+
+        r = self.client.get("/facturas/", {"month": hoy.month, "year": hoy.year})
+        self.assertEqual(r.data["numero_de_facturas"], 1, r.data)
+
+        r = self.client.get("/facturas/", {"date": hoy.isoformat()})
+        self.assertEqual(r.data["numero_de_facturas"], 1, r.data)
+
+        # Un mes sin facturas -> 0
+        otro = hoy.replace(year=hoy.year - 1)
+        r = self.client.get("/facturas/", {"month": otro.month, "year": otro.year})
+        self.assertEqual(r.data["numero_de_facturas"], 0, r.data)

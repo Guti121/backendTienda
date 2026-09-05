@@ -6,6 +6,7 @@ from django.forms import ValidationError
 from rest_framework.generics import CreateAPIView, DestroyAPIView,ListAPIView,RetrieveAPIView
 from rest_framework import serializers  
 from Tienda_Virtual.globalFunctions import company_owner
+from Tienda_Virtual.dateutils import day_bounds, month_bounds
 from apps.shoppingcart.models import Factura, FacturaDetalle
 from apps.base.api.user.viewsPermissions import IsAdminOrCreator, IsWorkerOrCreator, isCreator
 from apps.colletion.models import ProductModel
@@ -129,40 +130,35 @@ class FacturasListView(ListAPIView):
     permission_classes = [IsAuthenticated,IsAdminOrCreator]
 
     def get_queryset(self):
-        company=company_owner(self.request.user)
+        company = company_owner(self.request.user)
         queryset = Factura.objects.filter(tienda=company)
 
-        # Obtener el queryset filtrado
-        # Obtener parámetros de la solicitud
-        month = self.request.query_params.get('month', None)
-        year = self.request.query_params.get('year', None)
-        date_str = self.request.query_params.get('date', None)
+        month = self.request.query_params.get('month')
+        year = self.request.query_params.get('year')
+        date_str = self.request.query_params.get('date')
 
-        # Filtrar por mes y año si se pasan ambos parámetros
+        # Se filtra con rangos [inicio, fin) en vez de fecha__year/__month/__date:
+        # esos lookups sobre DateTimeField con USE_TZ se traducen a CONVERT_TZ y
+        # necesitan las tablas de timezone de MySQL cargadas; si faltan devuelven
+        # NULL y no matchea nada. El rango explícito no depende de eso y usa índice.
         if month and year:
-            queryset = queryset.filter(fecha__year=year, fecha__month=month)
-            return queryset
-        
-        # Filtrar por fecha específica si se pasa el parámetro 'date'
-        elif date_str:
             try:
-                # Validar formato
-                year, month, day = map(int, date_str.split('-'))
-                if not (1 <= month <= 12 and 1 <= day <= 31):
-                    raise ValueError("Fecha fuera de rango")
-
-                date_parse = datetime.strptime(date_str, "%Y-%m-%d").date()
-                return queryset.filter(fecha__date=date_parse)
-
+                inicio, fin = month_bounds(int(year), int(month))
             except (ValueError, TypeError):
-                return queryset.none()  # Evita error 500 y solo devuelve una lista vacía
-        else:
-            current_date = timezone.now()
-            queryset = queryset.filter(fecha__year=current_date.year, fecha__month=current_date.month)
-            return queryset
-            
+                return queryset.none()
+            return queryset.filter(fecha__gte=inicio, fecha__lt=fin)
 
-        
+        if date_str:
+            try:
+                d = datetime.strptime(date_str, "%Y-%m-%d").date()
+            except (ValueError, TypeError):
+                return queryset.none()
+            inicio, fin = day_bounds(d)
+            return queryset.filter(fecha__gte=inicio, fecha__lt=fin)
+
+        hoy = timezone.localtime(timezone.now())
+        inicio, fin = month_bounds(hoy.year, hoy.month)
+        return queryset.filter(fecha__gte=inicio, fecha__lt=fin)
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()
