@@ -35,6 +35,5 @@ Thumbs.db
 /barcodes
 /productos
 
-*/migrations/*.py
-!*/migrations/__init__.py   
-# Ignore migrations
+# Las migraciones SÍ se versionan (antes se ignoraban con */migrations/*.py,
+# lo que provocaba divergencias de esquema entre entornos).
