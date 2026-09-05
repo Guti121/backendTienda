@@ -743,6 +743,30 @@ ajustarlo o volver a exponerlo como `read_only`.
 
 ---
 
+## 10bis. Pruebas E2E contra MySQL real (2026-09-05)
+
+Se recreó la BD local (MySQL 8, usuario `tienda`, ver README), se pobló con
+`manage.py seed_demo` (2 empresas, 6 usuarios, 8 productos, config, 3 facturas;
+logins `*@demo.local` / `demo12345`) y se corrió una batería de **41 checks E2E**
+sobre los endpoints reales: login/JWT, permisos por rol, alta+validación de
+producto, código de barras async, listados, config de precios, facturación +
+stock + rollback de sobreventa, borrado que repone stock, lectura de código de
+barras, catálogo público, aislamiento multi-tenant, QR onboarding, inventario y
+reporte Celery. **Todos en verde.**
+
+**Bug encontrado y corregido** (commit `6da3776`): `GET /facturas/` y sus filtros
+`month`/`year`/`date` devolvían **siempre vacío en MySQL**. Con `USE_TZ=True`, los
+lookups `fecha__year` / `__month` / `__date` sobre un `DateTimeField` se traducen
+a `CONVERT_TZ(...)`, que necesita las **tablas de timezone del servidor MySQL**
+cargadas; si faltan (por defecto en una instalación de MySQL en Windows) devuelve
+`NULL` y el `WHERE` no matchea nada. En SQLite funcionaba, por eso no salió en la
+suite. Solución: `Tienda_Virtual/dateutils.py` con `month_bounds()`/`day_bounds()`
+y `FacturasListView` filtrando por `fecha__gte` / `fecha__lt` (no depende de las
+tz tables y usa índice). *Recomendado igualmente* cargar las tz tables de MySQL
+(`https://dev.mysql.com/downloads/timezones.html`) para cualquier otro uso.
+
+---
+
 ## 11. Checklist accionable
 
 - [x] 0.1 Fecha dentro de las tareas Celery
