@@ -604,15 +604,37 @@ ajustarlo o volver a exponerlo como `read_only`.
 
 ### Fase 3 — Configuración unificada
 
-- Meter la config de **Celery y S3 en `base.py`** (con valores por env y defaults
-  de desarrollo), no solo en `production.py`.
-- Elegir **una** fuente para las tareas programadas: o `beat_schedule` en código, o
-  `django-celery-beat` (DatabaseScheduler). Si se queda `django-celery-beat`,
-  registrar las tareas por migración/data.
-- `requirements/` dividido: `base.txt`, `local.txt`, `production.txt`
-  (+ `gunicorn`, `boto3`, `django-storages`). O migrar a `pyproject.toml`/Poetry.
-- Añadir `.env.example` con **todas** las claves que leen los settings.
-- `settings/__init__.py`: documentar cómo se elige el módulo (`DJANGO_SETTINGS_MODULE`).
+> **Estado (2026-09-05):** núcleo aplicado y verificado (suite de 28 tests en
+> verde, `manage.py check` OK, `manage.py backfill_barcodes --help` OK).
+
+- ✅ **Config de Celery en `base.py`** (broker/backend por env con default Redis
+  local, serializers, `CELERY_TIMEZONE = TIME_ZONE`, `CELERY_TASK_ALWAYS_EAGER`
+  por env, `CELERY_TASK_EAGER_PROPAGATES`). Se quitó el bloque duplicado de
+  `production.py`. Ahora `celery -A Tienda_Virtual worker` funciona con cualquier
+  módulo de settings.
+- ✅ **`celery.py`**: deja de clavar `DJANGO_SETTINGS_MODULE` a `production` →
+  `local` (consistente con `manage.py`/`wsgi.py`; en prod se exporta la env var).
+- ✅ **`settings/local.py`** (no versionado): `CELERY_TASK_ALWAYS_EAGER = True`
+  → las tareas corren en el acto, sin Redis ni worker, en desarrollo. Un clon
+  nuevo lo obtiene poniendo `CELERY_TASK_ALWAYS_EAGER=True` en su `.env`.
+- ✅ **Beat schedule**: fuente única = el dict en `celery.py` (versionado).
+  `django_celery_beat` queda instalado pero sin usar (quitarlo toca la BD → se
+  hace en la sesión de migraciones).
+- ✅ **Código de barras asíncrono**: `ProductModel.save()` ya no renderiza el PNG
+  ni lo sube en la request; encola `apps/colletion/tasks.py::generar_codigo_barras_task`
+  vía `transaction.on_commit` (idempotente, tolera producto borrado, 3 reintentos).
+  El método `generarcodigo_barras(numero, tienda, creado_por)` pasó a
+  `crear_codigo_barras()` que lee de `self`.
+- ✅ **Comando `manage.py backfill_barcodes [--sync] [--dry-run]`** para los
+  productos que quedaron sin código.
+- ✅ **`.env.example`** con todas las claves que leen los settings.
+- ⏳ **S3 a `base.py`** con toggle (`USE_S3`): **diferido**. `production.py`
+  funciona y moverlo ahora no aporta nada en dev; se hará junto con el split de
+  requirements.
+- ⏳ **`requirements/` dividido** (`base` / `local` / `production` + `gunicorn`):
+  diferido (P1 no se despliega; un solo `requirements.txt` basta por ahora).
+- ⏳ **Quitar `django_celery_beat`** de `INSTALLED_APPS`: diferido a la sesión de
+  migraciones (drop de ~15 tablas en una BD con datos).
 
 ### Fase 4 — Arquitectura y mantenibilidad
 
@@ -673,7 +695,10 @@ ajustarlo o volver a exponerlo como `read_only`.
 - [x] 2.x Totales de facturas sin JOIN triple; `company_owner` cacheado; búsqueda `valor` sin cast
 - [ ] 2.x Índices de BD *(diferido: sesión de migraciones)*
 - [ ] 2.x Código de barras en Celery *(diferido: Fase 3)*
-- [ ] 3.x Config Celery/S3 en `base.py` + `.env.example` + requirements por entorno
+- [x] 3.x Config Celery en `base.py` + `CELERY_TASK_ALWAYS_EAGER` + `.env.example`
+- [x] 3.x Código de barras → Celery (`transaction.on_commit`) + `backfill_barcodes`
+- [ ] 3.x S3 a `base.py` con toggle + split de `requirements/` *(diferido)*
+- [ ] 3.x Quitar `django_celery_beat` *(diferido: sesión de migraciones)*
 - [ ] 4.x Capa de servicios + validación única + permisos unificados
 - [ ] 5.x Tests de stock/reportes/multi-tenant + OpenAPI + CI
 
