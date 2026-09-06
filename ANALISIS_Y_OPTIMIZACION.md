@@ -845,7 +845,7 @@ arrastrando todo su historial en cascada (por diseño, pero sin exportación pre
 - [ ] 4.x Renombrar apps/archivos con typos *(diferido: sesión de migraciones)*
 - [x] 5.x Suite de tests real (40, verde) + `settings/test.py` + CI + README + `.gitignore` saneado
 - [ ] 5.x OpenAPI (`drf-spectacular`) *(pendiente: requiere `pip install`)*
-- [ ] 5.x Actualizar dependencias (Dependabot: ~49 vulnerabilidades)
+- [x] 5.x Actualizar dependencias (commit `5c0756a`): Django 5.2 LTS, DRF 3.18, celery 5.6, pillow 12, redis-py 8, **boto3 instalado**. Suite 70/70 + E2E 41/41. *Falta probar worker Celery real + Redis 8.*
 
 ---
 
