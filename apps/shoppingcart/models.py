@@ -22,14 +22,14 @@ class FacturaDetalle(BaseModel):
     subtotal = models.DecimalField(max_digits=10, decimal_places=2)
 
     def save(self, *args, **kwargs):
-        if self.producto:  
-            self.nombre_producto = self.producto.nombre  # Guarda el nombre del producto antes de que pueda eliminarse
-            self.valor_und=self.producto.valor #Guarda el valor del producto por unidad 
-            self.valor_mayor_und=self.producto.valor_mayor * self.cantidad
-            if self.producto.valor_costos_fijos:
-                self.valor_con_CF = (self.producto.valor_costos_fijos or 0) * self.cantidad
-            else:
-                self.valor_con_CF=0
+        # Solo al CREAR: se congelan los valores del producto (snapshot histórico).
+        # En un update posterior NO se re-copian, para no reescribir el importe de
+        # una factura ya emitida si el producto cambió de precio.
+        if self._state.adding and self.producto:
+            self.nombre_producto = self.producto.nombre
+            self.valor_und = self.producto.valor
+            self.valor_mayor_und = self.producto.valor_mayor * self.cantidad
+            self.valor_con_CF = (self.producto.valor_costos_fijos or 0) * self.cantidad
         super().save(*args, **kwargs)
 
     def __str__(self):

@@ -113,10 +113,11 @@ class FacturasCreateView(CreateAPIView):
                 return Response({"error": str(e)}, status=status.HTTP_403_FORBIDDEN)
             except ProductModel.DoesNotExist as e:
                 return Response({"error": "Producto no encontrado."}, status=status.HTTP_404_NOT_FOUND)
-            except Exception as e:
-                # Captura cualquier otro error inesperado
+            except Exception:
+                # No se filtra el detalle del error al cliente; queda en el log.
+                logger.exception("Error inesperado creando factura")
                 return Response(
-                    {"error": "Ocurrió un error inesperado.", "detalle": str(e)},
+                    {"error": "Ocurrió un error inesperado al crear la factura."},
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 )
 
@@ -211,26 +212,41 @@ class FacturaDestroyView(DestroyAPIView):
 
 
     def perform_destroy(self, instance):
-  
-        # Llama al método de eliminación del modelo
-        pk = instance.id
-        company=company_owner(self.request.user)
-        factura_detalles = FacturaDetalle.objects.filter(tienda=company, factura=pk)
+        company = company_owner(self.request.user)
 
-        for detalle in factura_detalles:
-            producto = detalle.producto
-            cantidad = detalle.cantidad
+        # Reposición de stock + borrado, TODO atómico. select_for_update() bloquea
+        # los productos para que una venta simultánea no pise la reposición. Si algo
+        # falla, rollback completo (no queda factura borrada con stock sin reponer).
+        with transaction.atomic():
+            a_reponer = defaultdict(int)
+            for producto_id, cantidad in (
+                FacturaDetalle.objects
+                .filter(factura=instance, tienda=company)
+                .values_list('producto_id', 'cantidad')
+            ):
+                if producto_id is not None:
+                    a_reponer[producto_id] += cantidad
 
-            if producto:  # ✅ Verifica que el producto aún exista
-                try:
-                    producto.unidades_disponibles += cantidad
-                    if producto.unidades_disponibles != 0:
-                        producto.disponible = True
-                    producto.save()
-                except Exception:
-                    logger.exception("Error al reponer stock del producto %s", producto.id)
-    
-        instance.delete()
+            if a_reponer:
+                productos = list(
+                    ProductModel.objects
+                    .select_for_update()
+                    .filter(id__in=a_reponer.keys(), tienda=company)
+                )
+                for p in productos:
+                    p.unidades_disponibles += a_reponer[p.id]
+                    if p.unidades_disponibles > 0:
+                        p.disponible = True
+                ProductModel.objects.bulk_update(
+                    productos, ['unidades_disponibles', 'disponible']
+                )
+
+            logger.info(
+                "Factura %s eliminada por %s (tienda %s); stock repuesto en %d producto(s)",
+                instance.id, getattr(self.request.user, 'email', self.request.user),
+                company.id, len(a_reponer),
+            )
+            instance.delete()
 
     def delete(self, request, *args, **kwargs):
     

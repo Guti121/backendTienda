@@ -173,7 +173,18 @@ class ProductDestroyAPIView(DestroyAPIView):
         product = ProductModel.objects.filter(id=pk, tienda = company).first()
         if not product:
             return Response({'error': 'No existe un formulario con estos datos!'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
+        # No se borra un producto con ventas registradas: al hacerlo el
+        # FacturaDetalle queda con producto=NULL y el stock ya no se puede
+        # reponer si luego se anula la factura. Mejor "despublicarlo".
+        from apps.shoppingcart.models import FacturaDetalle
+        if FacturaDetalle.objects.filter(producto=product).exists():
+            return Response(
+                {'error': 'Este producto tiene ventas registradas y no se puede eliminar. '
+                          'Puedes ocultarlo del catálogo con "publicar" y dejar el stock en 0.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
         # ✅ Eliminar imágenes asociadas
         for img in product.imagenes.all():
             img.imagen.delete(save=False)  # Elimina archivo del storage (S3)

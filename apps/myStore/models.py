@@ -22,7 +22,9 @@ class Company(models.Model):
     email = models.EmailField(unique=True)
     direction = models.CharField(max_length=255)
     municipality = models.CharField(max_length=100)
-    creator_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    # PROTECT: no se puede borrar un usuario que creó una empresa sin borrar
+    # antes la empresa (evita arrastrar en cascada todo el historial).
+    creator_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
 
     def clean(self):
         clean_name = self.name.lower().strip()
@@ -70,7 +72,9 @@ class BaseModel(models.Model):
     asignaba (código muerto): eliminado.
     """
     tienda = models.ForeignKey('myStore.Company', on_delete=models.CASCADE, editable=False)
-    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, editable=False, related_name="%(class)s_creados")
+    # PROTECT: borrar un usuario NO debe arrastrar en cascada sus facturas /
+    # productos / etc. Para borrar un usuario primero hay que resolver su historial.
+    creado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, editable=False, related_name="%(class)s_creados")
     modificado_por = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, editable=False, related_name="%(class)s_modificados")
     creado_en = models.DateTimeField(auto_now_add=True)
     modificado_en = models.DateTimeField(auto_now=True)
