@@ -777,6 +777,48 @@ aislamiento se apoya en que **cada `get_queryset()` filtra por `tienda=company_o
 
 ---
 
+## 10ter. Integridad de facturas (revisión + fixes, commit `772e6b3`)
+
+**Creación**: ya era sólida (Fase 0.3) — `transaction.atomic()` + `select_for_update()`,
+`total` calculado en el servidor, snapshot de `nombre_producto`/`valor_und`/… al
+crear cada `FacturaDetalle`. Las facturas **son inmutables** (no hay endpoint de
+update). Al borrar un **producto** con `SET_NULL`, la línea de factura sobrevive
+con sus datos históricos.
+
+Se corrigieron:
+
+1. 🔴 **`creado_por` (BaseModel) y `Company.creator_user`: `CASCADE` → `PROTECT`.**
+   Antes, borrar un `CustomUser` (p. ej. desde `/admin/`) **arrastraba en cascada
+   todas sus facturas, detalles y productos** — sin reponer stock ni dejar rastro.
+   Ahora hay que resolver el historial antes de borrar el usuario. Migraciones
+   `no-op` a nivel SQL (`on_delete` es lógica de Django).
+2. 🔴 **`FacturaDestroyView.perform_destroy`**: reposición de stock + borrado ahora
+   en `transaction.atomic()` con `select_for_update()` y `bulk_update`. Antes: sin
+   transacción (si moría a medias → factura borrada con stock sin reponer, o stock
+   doble al reintentar) y el `try/except` **se tragaba el error** de reposición
+   dejando inventario perdido en silencio. Se añadió log de auditoría (quién borró
+   qué factura).
+3. 🟠 **`FacturaDetalle.save()`**: el snapshot solo se hace al **crear**
+   (`self._state.adding`). Antes se re-copiaba en cada `save()`, con riesgo de
+   reescribir el importe de una factura ya emitida.
+4. 🟠 **`ProductDestroyAPIView`**: **no se puede borrar un producto con ventas**
+   (409). Antes se podía, dejando `FacturaDetalle.producto=NULL` y el stock
+   irreponible al anular la factura.
+5. 🟡 `signals.py`: el recálculo del reporte al borrar un detalle se encola con
+   `transaction.on_commit` (antes corría antes del commit → datos obsoletos en el
+   worker real).
+6. 🟡 `FacturasCreateView.post`: el `500` ya no filtra `str(e)` al cliente.
+
+**Quién puede eliminar facturas:** solo `admin` o `creator` (`IsAdminOrCreator`),
+y solo de su propia tienda; el `worker` que las crea **no** puede borrarlas. El
+superusuario sí desde `/admin/` (sin las protecciones de la vista).
+
+**Pendiente (fuera de este bloque):** no hay soft-delete / archivo de facturas
+anuladas ni numeración fiscal consecutiva (DIAN); `Company` borrada sigue
+arrastrando todo su historial en cascada (por diseño, pero sin exportación previa).
+
+---
+
 ## 11. Checklist accionable
 
 - [x] 0.1 Fecha dentro de las tareas Celery
