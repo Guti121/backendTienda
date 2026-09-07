@@ -9,11 +9,16 @@ from apps.colletion.models import ProductModel, TypeProductModel
 
 class CatalogoProductListSerializer(serializers.ModelSerializer):
     image_principal = serializers.SerializerMethodField()
+    # Nombre del tipo de producto (para agrupar/etiquetar en el catálogo web).
+    tipo_producto = serializers.CharField(
+        source='tipo_producto.tipo_producto', read_only=True, default=None
+    )
+
     class Meta:
         model = ProductModel
-        fields = ['id', 'nombre', 'valor', 'image_principal', 'numero_producto','creado_en', 'modificado_en']
+        fields = ['id', 'nombre', 'valor', 'image_principal', 'tipo_producto',
+                  'numero_producto', 'creado_en', 'modificado_en']
 
-  
     def get_image_principal(self, obj):
         # Recorre en Python el prefetch 'imagenes' (evita el N+1 de .filter()).
         principal = next((img for img in obj.imagenes.all() if img.principal), None)
