@@ -23,10 +23,14 @@ class CatalogoListView(ListAPIView):
             raise ValidationError(detail="El parámetro 'name' es obligatorio.")
 
         tienda = get_object_or_404(Company, name__iexact=name_param)
+        # Orden por defecto: sin un order_by explícito la paginación no es estable
+        # (MySQL puede repetir o saltarse filas entre páginas y Django avisa con
+        # UnorderedObjectListWarning). Los params 'fecha'/'orden' lo sobreescriben.
         queryset = (ProductModel.objects
                     .filter(disponible=True, publicar=True, tienda=tienda)
                     .select_related('tipo_producto')
-                    .prefetch_related('imagenes'))
+                    .prefetch_related('imagenes')
+                    .order_by('-creado_en'))
 
         # Filtro por tipo de producto
         if tipo_param:
@@ -36,11 +40,14 @@ class CatalogoListView(ListAPIView):
             except ValueError:
                 raise ValidationError(detail="El parámetro 'tipo' debe ser numérico.")
 
-        # Ordenamiento
+        # Ordenamiento (sobreescribe el orden por defecto). Siempre con 'id' de
+        # desempate para que la paginación sea determinista.
         if fecha_param in ['asc', 'desc']:
-            queryset = queryset.order_by('creado_en' if fecha_param == 'asc' else '-creado_en')
+            queryset = queryset.order_by(
+                'creado_en' if fecha_param == 'asc' else '-creado_en', 'id')
         elif orden_param in ['asc', 'desc']:
-            queryset = queryset.order_by('valor' if orden_param == 'asc' else '-valor')
+            queryset = queryset.order_by(
+                'valor' if orden_param == 'asc' else '-valor', 'id')
 
         return queryset
 
@@ -74,6 +81,9 @@ class CatalogoTipoProductListView(ListAPIView):
     authentication_classes = []
     permission_classes = []
     serializer_class = CatalogoTipoProductListSerializer
+    # Lista corta (las categorías de una tienda): se devuelve completa, sin
+    # paginar, para que el menú de categorías del catálogo no se corte.
+    pagination_class = None
 
     def get_queryset(self):
         name_param = self.kwargs.get('name')
