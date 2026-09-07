@@ -1,7 +1,7 @@
 
 
 
-from apps.colletion.api.serializers.serializer import ProductImageSerializer
+from apps.colletion.api.serializers.serializer import ProductImageSerializer, _abs_media
 from rest_framework import serializers
 
 from apps.colletion.models import ProductModel, TypeProductModel
@@ -17,7 +17,7 @@ class CatalogoProductListSerializer(serializers.ModelSerializer):
     def get_image_principal(self, obj):
         # Recorre en Python el prefetch 'imagenes' (evita el N+1 de .filter()).
         principal = next((img for img in obj.imagenes.all() if img.principal), None)
-        return principal.imagen.url if principal else None
+        return _abs_media(self, principal.imagen.url) if principal else None
 
 
 

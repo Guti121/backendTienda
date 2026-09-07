@@ -4,6 +4,15 @@ from rest_framework import serializers
 from ...models import ProductImage, ProductModel,TypeProductModel
 
 
+def _abs_media(serializer, url):
+    """URL de media absoluta. `FileField.url` es relativa (p. ej. '/productos/x.jpg')
+    y el front, servido desde otro origen, no la sabe resolver."""
+    if not url:
+        return None
+    request = serializer.context.get('request')
+    return request.build_absolute_uri(url) if request else url
+
+
 #.............................................................................
 """.............Se realizan los serializadores para Product..........."""
 # serializers.py
@@ -108,7 +117,7 @@ class ProductModelListFilterSerializer(serializers.ModelSerializer):
         # Recorre en Python el prefetch 'imagenes' (no .filter(), que dispararía
         # una query por fila y rompería el prefetch_related).
         principal = next((img for img in obj.imagenes.all() if img.principal), None)
-        return principal.imagen.url if principal else None
+        return _abs_media(self, principal.imagen.url) if principal else None
 
 
 ##serializador para retrieve product
@@ -139,7 +148,7 @@ class ProductModelRetrieveProductCreatorSerializer(serializers.ModelSerializer):
     
     def get_imagen_principal(self, obj):
         imagen = obj.imagen_principal()
-        return imagen.imagen.url if imagen else None
+        return _abs_media(self, imagen.imagen.url) if imagen else None
     
     def to_representation(self, instance):
         representation = super().to_representation(instance)
