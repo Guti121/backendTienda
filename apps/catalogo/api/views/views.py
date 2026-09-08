@@ -7,7 +7,8 @@ from django.shortcuts import get_object_or_404
 from apps.myStore.models import Company
 
 # Vista para listar productos del catálogo de una tienda específica
-# Permite filtrar por tipo de producto, ordenar por valor o fecha, y requiere el
+# Permite buscar por nombre ('q'), filtrar por tipo de producto ('tipo') y
+# ordenar por valor o fecha ('orden'/'fecha'). La tienda va en la URL.
 class CatalogoListView(ListAPIView):
     authentication_classes = []
     permission_classes = []
@@ -15,6 +16,7 @@ class CatalogoListView(ListAPIView):
 
     def get_queryset(self):
         name_param = self.kwargs.get('name')
+        q_param = self.request.query_params.get('q')          # búsqueda por nombre
         tipo_param = self.request.query_params.get('tipo')
         orden_param = self.request.query_params.get('orden')  # 'asc' o 'desc'
         fecha_param = self.request.query_params.get('fecha')  # 'asc' o 'desc'
@@ -31,6 +33,12 @@ class CatalogoListView(ListAPIView):
                     .select_related('tipo_producto')
                     .prefetch_related('imagenes')
                     .order_by('-creado_en'))
+
+        # Búsqueda por nombre (substring, case-insensitive por la collation de
+        # MySQL). 'q' vacío o solo espacios se ignora (devuelve el listado
+        # completo), no es un error.
+        if q_param and q_param.strip():
+            queryset = queryset.filter(nombre__icontains=q_param.strip())
 
         # Filtro por tipo de producto
         if tipo_param:
