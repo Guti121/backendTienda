@@ -34,11 +34,19 @@ class CreateCompanySerializer(serializers.ModelSerializer):
 class RetrieveCompanySerializer(serializers.ModelSerializer):
     class Meta:
         model = Company
-        fields =  ['url_logo', 'nit','company', 'name', 'phone', 'email', 'direction', 'municipality','creator_user']  # Corrige `direction` si aplica
+        fields = ['url_logo', 'nit', 'company', 'name', 'phone', 'email',
+                  'direction', 'municipality', 'creator_user',
+                  # Personalización del catálogo público.
+                  'catalog_font', 'catalog_tagline', 'catalog_announcement',
+                  'catalog_banner']
         read_only_fields = fields  # Opcion
 
 
 class UpdateCompanySerializer(serializers.ModelSerializer):
     class Meta:
         model = Company  # Asegúrate de incluir el modelo
-        fields = ['url_logo', 'nit', 'company', 'name', 'phone', 'email', 'direction', 'municipality']
+        fields = ['url_logo', 'nit', 'company', 'name', 'phone', 'email',
+                  'direction', 'municipality',
+                  # Personalización del catálogo público.
+                  'catalog_font', 'catalog_tagline', 'catalog_announcement',
+                  'catalog_banner']

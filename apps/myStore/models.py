@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from django.conf import settings
 from django.db import models
 from django.core.exceptions import ValidationError
@@ -9,6 +11,24 @@ username_validator = RegexValidator(
     regex=r'^[a-zA-Z0-9._]+$',
     message="Solo se permiten letras, números, puntos y guiones bajos. No se permiten espacios ni símbolos."
 )
+
+# Personalización del catálogo público. El backend solo guarda la clave; cada
+# clave la traduce a una tipografía real la mini-app web (repo `catalog-web`),
+# así se puede cambiar el typeface sin migración.
+CATALOG_FONT_CHOICES = [
+    ("", "Inter (por defecto)"),
+    ("serif", "Serif elegante"),
+    ("rounded", "Redondeada"),
+    ("geometric", "Geométrica"),
+    ("grotesk", "Grotesca moderna"),
+]
+
+
+def upload_to_catalog_banner(instance, filename):
+    ext = filename.split(".")[-1].lower()
+    slug = instance.name.replace(" ", "_").lower()
+    return f"catalogo/banner/{slug}/{uuid4().hex}.{ext}"
+
 
 class Company(models.Model):
     url_logo = models.ImageField(upload_to='profileCompany',null=True)
@@ -26,6 +46,14 @@ class Company(models.Model):
     # antes la empresa (evita arrastrar en cascada todo el historial).
     creator_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
 
+    # ---- Personalización del catálogo público (todo opcional) ----
+    catalog_font = models.CharField(
+        max_length=20, blank=True, default="", choices=CATALOG_FONT_CHOICES)
+    catalog_tagline = models.CharField(max_length=120, blank=True, default="")
+    catalog_announcement = models.CharField(max_length=140, blank=True, default="")
+    catalog_banner = models.ImageField(
+        upload_to=upload_to_catalog_banner, null=True, blank=True)
+
     def clean(self):
         clean_name = self.name.lower().strip()
         if Company.objects.filter(name__iexact=clean_name).exclude(pk=self.pk).exists():
@@ -34,13 +62,16 @@ class Company(models.Model):
 
     
     def save(self, *args, **kwargs):
-        # Verifica si ya existía una imagen y si está cambiando
+        # Si una imagen existente cambia, borra el archivo anterior del storage.
         if self.pk:
             try:
                 old = Company.objects.get(pk=self.pk)
-                if old.url_logo and old.url_logo != self.url_logo:
-                    if default_storage.exists(old.url_logo.name):
-                        default_storage.delete(old.url_logo.name)
+                for field in ("url_logo", "catalog_banner"):
+                    old_file = getattr(old, field)
+                    new_file = getattr(self, field)
+                    if old_file and old_file != new_file:
+                        if default_storage.exists(old_file.name):
+                            default_storage.delete(old_file.name)
             except Company.DoesNotExist:
                 pass
 

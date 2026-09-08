@@ -123,9 +123,10 @@ class CompanyUpdateAPIView(UpdateAPIView):
 
     def patch(self, request, *args, **kwargs):
         company = self.get_object()
-        
-        # Filtrar solo los campos permitidos
-        allowed_fields = {'url_logo', 'nit', 'company', 'name', 'phone', 'email', 'direction', 'municipality'}
+
+        # Filtrar solo los campos permitidos (los del serializer, así no se
+        # desincroniza al añadir campos nuevos).
+        allowed_fields = set(self.get_serializer().fields) - {'id'}
         data = {key: value for key, value in request.data.items() if key in allowed_fields}
 
         if not data:
