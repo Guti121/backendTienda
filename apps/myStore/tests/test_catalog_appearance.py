@@ -71,6 +71,36 @@ class CatalogAppearanceUpdateTest(TestCase):
                     format="multipart")
         self.assertEqual(r.status_code, 403)
 
+    def test_creator_actualiza_paleta_y_colores(self):
+        r = self._patch({
+            "catalog_palette": "menta",
+            "catalog_color_accent": "#0d9488",
+            "catalog_color_bg": "#f0fdfa",
+            "catalog_color_text": "#134e4a",
+        })
+        self.assertEqual(r.status_code, 200, r.data)
+        self.company.refresh_from_db()
+        self.assertEqual(self.company.catalog_palette, "menta")
+        self.assertEqual(self.company.catalog_color_accent, "#0d9488")
+        self.assertEqual(self.company.catalog_color_bg, "#f0fdfa")
+        self.assertEqual(self.company.catalog_color_text, "#134e4a")
+
+    def test_hex_invalido_es_400(self):
+        for value in ("rojo", "#12", "4f46e5", "#gggggg"):
+            r = self._patch({"catalog_color_accent": value})
+            self.assertEqual(r.status_code, 400, f"{value!r} debería fallar")
+            self.assertIn("catalog_color_accent", r.data)
+
+    def test_paleta_fuera_de_choices_es_400(self):
+        r = self._patch({"catalog_palette": "neon"})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("catalog_palette", r.data)
+
+    def test_color_vacio_se_acepta(self):
+        # "" = sin override, vuelve a la paleta.
+        r = self._patch({"catalog_color_accent": ""})
+        self.assertEqual(r.status_code, 200, r.data)
+
 
 class CatalogAppearanceReadTest(TestCase):
     def setUp(self):
@@ -82,7 +112,8 @@ class CatalogAppearanceReadTest(TestCase):
         r = c.get("/store/retrieveCompany/")
         self.assertEqual(r.status_code, 200, r.data)
         for f in ("catalog_font", "catalog_tagline", "catalog_announcement",
-                  "catalog_banner"):
+                  "catalog_banner", "catalog_palette", "catalog_color_accent",
+                  "catalog_color_bg", "catalog_color_text"):
             self.assertIn(f, r.data)
 
     def test_endpoint_publico_defaults(self):
@@ -92,6 +123,10 @@ class CatalogAppearanceReadTest(TestCase):
         self.assertEqual(r.data["catalog_tagline"], "")
         self.assertEqual(r.data["catalog_announcement"], "")
         self.assertIsNone(r.data["catalog_banner"])
+        self.assertEqual(r.data["catalog_palette"], "")
+        self.assertEqual(r.data["catalog_color_accent"], "")
+        self.assertEqual(r.data["catalog_color_bg"], "")
+        self.assertEqual(r.data["catalog_color_text"], "")
 
     def test_endpoint_publico_devuelve_banner_absoluto(self):
         c = APIClient()

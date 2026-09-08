@@ -12,6 +12,11 @@ username_validator = RegexValidator(
     message="Solo se permiten letras, números, puntos y guiones bajos. No se permiten espacios ni símbolos."
 )
 
+hex_color_validator = RegexValidator(
+    regex=r'^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$',
+    message="Usa un color hex como #4f46e5.",
+)
+
 # Personalización del catálogo público. El backend solo guarda la clave; cada
 # clave la traduce a una tipografía real la mini-app web (repo `catalog-web`),
 # así se puede cambiar el typeface sin migración.
@@ -21,6 +26,19 @@ CATALOG_FONT_CHOICES = [
     ("rounded", "Redondeada"),
     ("geometric", "Geométrica"),
     ("grotesk", "Grotesca moderna"),
+]
+
+# Paleta base del catálogo. Igual que la fuente: el backend solo guarda la clave;
+# el hex de cada paleta y los colores derivados los resuelven los frontends
+# (catalog-web/lib/theme.ts y la app Expo). El dueño puede además sobreescribir
+# 3 colores sueltos (catalog_color_*).
+CATALOG_PALETTE_CHOICES = [
+    ("", "Índigo (por defecto)"),
+    ("carbon", "Carbón"),
+    ("calido", "Cálido"),
+    ("menta", "Menta"),
+    ("rosa", "Rosa"),
+    ("noche", "Noche (oscuro)"),
 ]
 
 
@@ -53,6 +71,15 @@ class Company(models.Model):
     catalog_announcement = models.CharField(max_length=140, blank=True, default="")
     catalog_banner = models.ImageField(
         upload_to=upload_to_catalog_banner, null=True, blank=True)
+    # Paleta base + override opcional de 3 colores (hex). "" = usar la paleta.
+    catalog_palette = models.CharField(
+        max_length=20, blank=True, default="", choices=CATALOG_PALETTE_CHOICES)
+    catalog_color_accent = models.CharField(
+        max_length=7, blank=True, default="", validators=[hex_color_validator])
+    catalog_color_bg = models.CharField(
+        max_length=7, blank=True, default="", validators=[hex_color_validator])
+    catalog_color_text = models.CharField(
+        max_length=7, blank=True, default="", validators=[hex_color_validator])
 
     def clean(self):
         clean_name = self.name.lower().strip()
