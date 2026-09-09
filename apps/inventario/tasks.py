@@ -38,16 +38,28 @@ def generar_reporte_ventas_dia(fecha=None):
             creado_en__range=(inicio_del_dia, fin_del_dia),
             factura__tienda=tienda
         )
-        facturas_hoy = ventas_hoy.values('factura').distinct().count()
-
-        reporte = ventas_hoy.aggregate(
-            productos_vendidos=Sum('cantidad') or 0,
-            total_valor_mayor_und=Sum('valor_mayor_und') or 0,
-            total_valor_con_CF=Sum('valor_con_CF') or 0,
-            total_subtotal=Sum('subtotal') or 0,
-        )
 
         reporte_existente = ReporteVentasDiario.objects.filter(fecha=hoy, tienda=tienda).first()
+
+        # Sin ventas: no se crea una fila en cero. Si quedaba un reporte de una
+        # pasada anterior (p. ej. se borraron todas las facturas del día), se
+        # elimina para no dejar totales obsoletos.
+        if not ventas_hoy.exists():
+            if reporte_existente:
+                logger.info(f"Sin ventas para {tienda.company} el {hoy}: se elimina el reporte.")
+                reporte_existente.delete()
+            continue
+
+        facturas_hoy = ventas_hoy.values('factura').distinct().count()
+
+        # valor_mayor_und / valor_con_CF son TOTALES de línea (precio * cantidad),
+        # no unitarios pese al nombre; ver FacturaDetalle.save().
+        reporte = ventas_hoy.aggregate(
+            productos_vendidos=Sum('cantidad'),
+            total_valor_mayor_und=Sum('valor_mayor_und'),
+            total_valor_con_CF=Sum('valor_con_CF'),
+            total_subtotal=Sum('subtotal'),
+        )
 
         if reporte_existente:
             logger.info(f"Actualizando reporte para {tienda.company} del día {hoy}...")
@@ -107,13 +119,24 @@ def generar_reporte_ventas_dia_update(fecha=None, company=None):
         factura__tienda=tienda
     )
 
-    facturas_hoy = ventas.values('factura').distinct().count() or 0
+    # Si ya no queda ninguna venta ese día, se elimina el reporte en vez de
+    # dejarlo en cero.
+    if not ventas.exists():
+        logger.info(f"🗑️ Sin ventas restantes para {tienda.company} el {hoy}: se elimina el reporte.")
+        reporte_existente.delete()
+        generar_reporte_ventas_mes_update.apply_async(kwargs={
+            'fecha': hoy.isoformat(),
+            'tienda_id': tienda.id
+        })
+        return
+
+    facturas_hoy = ventas.values('factura').distinct().count()
 
     reporte = ventas.aggregate(
-        productos_vendidos=Sum('cantidad') or 0,
-        total_valor_mayor_und=Sum('valor_mayor_und') or 0,
-        total_valor_con_CF=Sum('valor_con_CF') or 0,
-        total_subtotal=Sum('subtotal') or 0,
+        productos_vendidos=Sum('cantidad'),
+        total_valor_mayor_und=Sum('valor_mayor_und'),
+        total_valor_con_CF=Sum('valor_con_CF'),
+        total_subtotal=Sum('subtotal'),
     )
 
     reporte_existente.productos_vendidos = reporte['productos_vendidos'] or 0
@@ -152,15 +175,23 @@ def generar_reporte_ventas_mes():
             tienda=tienda
         )
 
-        reporte = reportes_diarios.aggregate(
-            productos_vendidos=Sum('productos_vendidos') or 0,
-            total_valor_mayor_und=Sum('total_valor_mayor_und') or 0,
-            total_valor_con_CF=Sum('total_valor_con_CF') or 0,
-            total_subtotal=Sum('total_subtotal') or 0,
-            facturas_total=Sum('facturas_total') or 0,
-        )
-
         reporte_existente = ReporteVentasMensual.objects.filter(fecha=primer_dia_mes, tienda=tienda).first()
+
+        # Sin diarios en el mes: no se crea mensual en cero; se borra el que
+        # hubiera quedado de una pasada anterior.
+        if not reportes_diarios.exists():
+            if reporte_existente:
+                logger.info(f"Sin diarios para {tienda.company} en {primer_dia_mes.strftime('%B %Y')}: se elimina el mensual.")
+                reporte_existente.delete()
+            continue
+
+        reporte = reportes_diarios.aggregate(
+            productos_vendidos=Sum('productos_vendidos'),
+            total_valor_mayor_und=Sum('total_valor_mayor_und'),
+            total_valor_con_CF=Sum('total_valor_con_CF'),
+            total_subtotal=Sum('total_subtotal'),
+            facturas_total=Sum('facturas_total'),
+        )
 
         if reporte_existente:
             logger.info(f"Actualizando reporte mensual de {tienda.company} para {primer_dia_mes.strftime('%B %Y')}...")
@@ -207,12 +238,19 @@ def generar_reporte_ventas_mes_update(fecha=None, tienda_id=None):
         fecha__range=[primer_dia_mes, ultimo_dia_mes]
     )
 
+    # Si ya no quedan diarios en el mes, se elimina el mensual en vez de dejarlo
+    # en cero.
+    if not reportes.exists():
+        logger.info(f"Sin diarios en {primer_dia_mes.strftime('%Y-%m')} para {tienda.company}: se elimina el mensual.")
+        reporte_mensual.delete()
+        return
+
     suma = reportes.aggregate(
-        productos_vendidos=Sum('productos_vendidos') or 0,
-        total_valor_mayor_und=Sum('total_valor_mayor_und') or 0,
-        total_valor_con_CF=Sum('total_valor_con_CF') or 0,
-        total_subtotal=Sum('total_subtotal') or 0,
-        facturas_total=Sum('facturas_total') or 0,
+        productos_vendidos=Sum('productos_vendidos'),
+        total_valor_mayor_und=Sum('total_valor_mayor_und'),
+        total_valor_con_CF=Sum('total_valor_con_CF'),
+        total_subtotal=Sum('total_subtotal'),
+        facturas_total=Sum('facturas_total'),
     )
 
     for k, v in suma.items():

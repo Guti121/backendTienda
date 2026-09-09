@@ -2,14 +2,12 @@ from datetime import date
 from apps.colletion.models import ProductModel
 from rest_framework.response import Response
 from rest_framework import status
-from django.db.models import F, ExpressionWrapper, FloatField, Sum
+from django.db.models import F, DecimalField, ExpressionWrapper, Sum
 
 from rest_framework.generics import ListAPIView
-from babel.numbers import format_currency
 from rest_framework.views import APIView
-from django.db.models import Sum
-from apps.inventario.api.serializers.serializer import InventarioListFilterSerializer, ReporteVentasDiarioSerializer, ReporteVentasMensualSerializer
-#Vista para realizar el inventario actual 
+from apps.inventario.api.serializers.serializer import ReporteVentasDiarioSerializer, ReporteVentasMensualSerializer
+#Vista para realizar el inventario actual
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
 from apps.base.api.user.viewsPermissions import isCreator
@@ -29,7 +27,8 @@ class InventarioView(ListAPIView):
         month = self.request.query_params.get('month')
         year = self.request.query_params.get('year')
 
-        queryset = ReporteVentasDiario.objects.filter(tienda=owner_company)
+        # order_by explícito: sin él la paginación es inconsistente (warning de DRF).
+        queryset = ReporteVentasDiario.objects.filter(tienda=owner_company).order_by('-fecha')
 
         if month and year:
             try:
@@ -38,7 +37,7 @@ class InventarioView(ListAPIView):
                 queryset = queryset.annotate(
                     month_field=ExtractMonth('fecha'),
                     year_field=ExtractYear('fecha')
-                ).filter(month_field=month, year_field=year).order_by('-fecha')
+                ).filter(month_field=month, year_field=year)
             except ValueError:
                 pass  # Si no son números válidos, no filtramos
 
@@ -55,7 +54,7 @@ class InventarioMesView(ListAPIView):
         month = self.request.query_params.get('month')
         year = self.request.query_params.get('year')
 
-        queryset = ReporteVentasMensual.objects.filter(tienda=owner_company)
+        queryset = ReporteVentasMensual.objects.filter(tienda=owner_company).order_by('-fecha')
 
         if month and year:
             try:
@@ -64,7 +63,7 @@ class InventarioMesView(ListAPIView):
                 queryset = queryset.annotate(
                     month_field=ExtractMonth('fecha'),
                     year_field=ExtractYear('fecha')
-                ).filter(month_field=month, year_field=year).order_by('-fecha')
+                ).filter(month_field=month, year_field=year)
             except ValueError:
                 pass
 
@@ -89,9 +88,13 @@ class ResumenVentasMensualView(APIView):
             return Response({"error": "El mes y año deben ser números válidos."},
                             status=status.HTTP_400_BAD_REQUEST)
 
-        # Validaciones opcionales
         if not (1 <= month <= 12):
-            return Response({"error": "El mes debe estar entre 1 y 12."}, status=400)
+            return Response({"error": "El mes debe estar entre 1 y 12."},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        if not (2000 <= year <= date.today().year + 1):
+            return Response({"error": "El año está fuera de rango."},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         reportes = ReporteVentasDiario.objects.annotate(
             mes_anno=ExtractMonth('fecha'),
@@ -126,26 +129,28 @@ class InventarioProductos(APIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, isCreator]
 
-    def post(self, request):
-        user = request.user
-        owner_company = company_owner(user)
+    def get(self, request):
+        """Valoración del stock activo (solo productos con disponible=True).
+
+        Totales en pesos enteros (DecimalField), coherente con el resto del
+        sistema sin centavos.
+        """
+        owner_company = company_owner(request.user)
+        pesos = DecimalField(max_digits=20, decimal_places=0)
 
         products = (
             ProductModel.objects
-            .filter(tienda=owner_company)
+            .filter(tienda=owner_company, disponible=True)
             .annotate(
                 subtotal_mayor=ExpressionWrapper(
-                    F('unidades_disponibles') * F('valor_mayor'),
-                    output_field=FloatField()
+                    F('unidades_disponibles') * F('valor_mayor'), output_field=pesos
                 ),
                 subtotal_venta=ExpressionWrapper(
-                    F('unidades_disponibles') * F('valor'),
-                    output_field=FloatField()
+                    F('unidades_disponibles') * F('valor'), output_field=pesos
                 ),
                 subtotal_costos=ExpressionWrapper(
-                    F('unidades_disponibles') * F('valor_costos_fijos'),
-                    output_field=FloatField()
-                )
+                    F('unidades_disponibles') * F('valor_costos_fijos'), output_field=pesos
+                ),
             )
         )
 
@@ -162,3 +167,7 @@ class InventarioProductos(APIView):
             "total_precio_venta": totals["total_precio_venta"] or 0,
             "total_costos_fijos": totals["total_costos_fijos"] or 0,
         })
+
+    # Compat: la app llama por POST (sin cuerpo). Se mantiene como alias de GET.
+    def post(self, request):
+        return self.get(request)

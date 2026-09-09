@@ -18,6 +18,8 @@ class FacturaDetalle(BaseModel):
     nombre_producto = models.CharField(max_length=255)  # Nuevo campo para almacenar el nombre
     cantidad = models.PositiveIntegerField()
     valor_und=models.DecimalField(max_digits=10, decimal_places=0,blank=False)
+    # valor_mayor_und y valor_con_CF guardan el TOTAL de la línea (precio * cantidad),
+    # no el unitario; el sufijo `_und` es histórico. Ver save() más abajo.
     valor_mayor_und= models.DecimalField(max_digits=10,decimal_places=0)
     valor_con_CF = models.DecimalField(max_digits=10,decimal_places=0,blank=False)
     subtotal = models.DecimalField(max_digits=10, decimal_places=0)
