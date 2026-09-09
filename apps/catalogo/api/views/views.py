@@ -1,10 +1,21 @@
 
 from rest_framework.exceptions import ValidationError
+from rest_framework.pagination import PageNumberPagination
 from apps.catalogo.api.serializers.serializers import CatalogoProductListSerializer, CatalogoProductRetrieveSerializer, CatalogoTipoProductListSerializer
 from rest_framework.generics import ListAPIView,RetrieveAPIView
 from apps.colletion.models import ProductModel, TypeProductModel
 from django.shortcuts import get_object_or_404
 from apps.myStore.models import Company
+
+
+class CatalogoPagination(PageNumberPagination):
+    """Solo para el listado público del catálogo: 30 por página (el resto de la
+    API sigue con el PAGE_SIZE global de 10). El cliente puede pedir otro tamaño
+    con ?page_size=, hasta 60."""
+    page_size = 30
+    page_size_query_param = 'page_size'
+    max_page_size = 60
+
 
 # Vista para listar productos del catálogo de una tienda específica
 # Permite buscar por nombre ('q'), filtrar por tipo de producto ('tipo') y
@@ -13,6 +24,7 @@ class CatalogoListView(ListAPIView):
     authentication_classes = []
     permission_classes = []
     serializer_class = CatalogoProductListSerializer
+    pagination_class = CatalogoPagination
 
     def get_queryset(self):
         name_param = self.kwargs.get('name')

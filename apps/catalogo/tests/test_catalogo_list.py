@@ -99,3 +99,34 @@ class CatalogoBusquedaNombreTest(TestCase):
         resp = self.client.get(self.url, {"q": "cami"})
         for key in ("count", "next", "previous", "results"):
             self.assertIn(key, resp.data)
+
+
+class CatalogoPaginacionTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.company, self.creador = make_company(nombre="tiendabulk")
+        self.tipo = make_tipo(self.company, self.creador, nombre="General")
+        prods = [
+            make_product(
+                self.company, self.creador, nombre=f"Prod {i:02}", tipo=self.tipo,
+            )
+            for i in range(35)
+        ]
+        _publicar(*prods)
+        self.url = f"/catalogo/list/{self.company.name}"
+
+    def test_pagina_trae_30_por_defecto(self):
+        resp = self.client.get(self.url)
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.data["count"], 35)
+        self.assertEqual(len(resp.data["results"]), 30)
+        self.assertIsNotNone(resp.data["next"])
+
+    def test_page_size_configurable_con_tope(self):
+        self.assertEqual(
+            len(self.client.get(self.url, {"page_size": 10}).data["results"]), 10
+        )
+        # max_page_size = 60 -> pedir 100 devuelve los 35, no falla
+        self.assertEqual(
+            len(self.client.get(self.url, {"page_size": 100}).data["results"]), 35
+        )
