@@ -101,6 +101,27 @@ class CatalogAppearanceUpdateTest(TestCase):
         r = self._patch({"catalog_color_accent": ""})
         self.assertEqual(r.status_code, 200, r.data)
 
+    def test_creator_actualiza_colores_finos_v3(self):
+        r = self._patch({
+            "catalog_color_surface": "#ffffff",
+            "catalog_color_muted": "#64748b",
+            "catalog_color_heading": "#0f172a",
+            "catalog_color_border": "#e2e8f0",
+            "catalog_color_accent_soft": "#eef2ff",
+        })
+        self.assertEqual(r.status_code, 200, r.data)
+        self.company.refresh_from_db()
+        self.assertEqual(self.company.catalog_color_surface, "#ffffff")
+        self.assertEqual(self.company.catalog_color_muted, "#64748b")
+        self.assertEqual(self.company.catalog_color_heading, "#0f172a")
+        self.assertEqual(self.company.catalog_color_border, "#e2e8f0")
+        self.assertEqual(self.company.catalog_color_accent_soft, "#eef2ff")
+
+    def test_hex_invalido_en_color_fino_es_400(self):
+        r = self._patch({"catalog_color_surface": "blanco"})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("catalog_color_surface", r.data)
+
 
 class CatalogAppearanceReadTest(TestCase):
     def setUp(self):
@@ -113,7 +134,10 @@ class CatalogAppearanceReadTest(TestCase):
         self.assertEqual(r.status_code, 200, r.data)
         for f in ("catalog_font", "catalog_tagline", "catalog_announcement",
                   "catalog_banner", "catalog_palette", "catalog_color_accent",
-                  "catalog_color_bg", "catalog_color_text"):
+                  "catalog_color_bg", "catalog_color_text",
+                  "catalog_color_surface", "catalog_color_muted",
+                  "catalog_color_heading", "catalog_color_border",
+                  "catalog_color_accent_soft"):
             self.assertIn(f, r.data)
 
     def test_endpoint_publico_defaults(self):
@@ -127,6 +151,10 @@ class CatalogAppearanceReadTest(TestCase):
         self.assertEqual(r.data["catalog_color_accent"], "")
         self.assertEqual(r.data["catalog_color_bg"], "")
         self.assertEqual(r.data["catalog_color_text"], "")
+        for f in ("catalog_color_surface", "catalog_color_muted",
+                  "catalog_color_heading", "catalog_color_border",
+                  "catalog_color_accent_soft"):
+            self.assertEqual(r.data[f], "")
 
     def test_endpoint_publico_devuelve_banner_absoluto(self):
         c = APIClient()

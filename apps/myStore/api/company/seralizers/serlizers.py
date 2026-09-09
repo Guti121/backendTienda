@@ -39,7 +39,10 @@ class RetrieveCompanySerializer(serializers.ModelSerializer):
                   # Personalización del catálogo público.
                   'catalog_font', 'catalog_tagline', 'catalog_announcement',
                   'catalog_banner', 'catalog_palette', 'catalog_color_accent',
-                  'catalog_color_bg', 'catalog_color_text']
+                  'catalog_color_bg', 'catalog_color_text',
+                  'catalog_color_surface', 'catalog_color_muted',
+                  'catalog_color_heading', 'catalog_color_border',
+                  'catalog_color_accent_soft']
         read_only_fields = fields  # Opcion
 
 
@@ -51,4 +54,7 @@ class UpdateCompanySerializer(serializers.ModelSerializer):
                   # Personalización del catálogo público.
                   'catalog_font', 'catalog_tagline', 'catalog_announcement',
                   'catalog_banner', 'catalog_palette', 'catalog_color_accent',
-                  'catalog_color_bg', 'catalog_color_text']
+                  'catalog_color_bg', 'catalog_color_text',
+                  'catalog_color_surface', 'catalog_color_muted',
+                  'catalog_color_heading', 'catalog_color_border',
+                  'catalog_color_accent_soft']

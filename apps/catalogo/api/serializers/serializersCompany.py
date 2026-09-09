@@ -15,7 +15,10 @@ class CatalogoCompanySerializer(serializers.ModelSerializer):
                   'direction', 'municipality',
                   'catalog_font', 'catalog_tagline', 'catalog_announcement',
                   'catalog_banner', 'catalog_palette', 'catalog_color_accent',
-                  'catalog_color_bg', 'catalog_color_text']
+                  'catalog_color_bg', 'catalog_color_text',
+                  'catalog_color_surface', 'catalog_color_muted',
+                  'catalog_color_heading', 'catalog_color_border',
+                  'catalog_color_accent_soft']
 
     def get_catalog_banner(self, obj):
         # URL absoluta: FileField.url es relativa y catalog-web corre en otro origen.

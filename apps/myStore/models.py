@@ -80,6 +80,17 @@ class Company(models.Model):
         max_length=7, blank=True, default="", validators=[hex_color_validator])
     catalog_color_text = models.CharField(
         max_length=7, blank=True, default="", validators=[hex_color_validator])
+    # Overrides finos (v3). "" = derivar del trío base como hasta ahora.
+    catalog_color_surface = models.CharField(
+        max_length=7, blank=True, default="", validators=[hex_color_validator])
+    catalog_color_muted = models.CharField(
+        max_length=7, blank=True, default="", validators=[hex_color_validator])
+    catalog_color_heading = models.CharField(
+        max_length=7, blank=True, default="", validators=[hex_color_validator])
+    catalog_color_border = models.CharField(
+        max_length=7, blank=True, default="", validators=[hex_color_validator])
+    catalog_color_accent_soft = models.CharField(
+        max_length=7, blank=True, default="", validators=[hex_color_validator])
 
     def clean(self):
         clean_name = self.name.lower().strip()
