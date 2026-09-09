@@ -1,6 +1,7 @@
 from django.utils import timezone
 from Tienda_Virtual.globalFunctions import company_owner
 from rest_framework import serializers
+from apps.base.api.fields import PesosField
 from ...models import ProductImage, ProductModel,TypeProductModel
 
 
@@ -24,6 +25,10 @@ class ProductImageSerializer(serializers.ModelSerializer):
 
 class ProductModelSerializer(serializers.ModelSerializer):
     imagenes = ProductImageSerializer(many=True, write_only=True, required=False)
+    # Pesos enteros: tolera y redondea entradas con decimales.
+    valor = PesosField(max_digits=10)
+    valor_mayor = PesosField(max_digits=10)
+    valor_costos_fijos = PesosField(max_digits=10, required=False)
 
     class Meta:
         model = ProductModel
@@ -175,6 +180,9 @@ class ProductModelDestroySerializer(serializers.ModelSerializer):
 ##serializer update Product
 class ProductModelUpdateProductSerializer(serializers.ModelSerializer):
     imagenes = ProductImageSerializer( many=True, required=False,read_only=True)
+    valor = PesosField(max_digits=10, required=False)
+    valor_mayor = PesosField(max_digits=10, required=False)
+    valor_costos_fijos = PesosField(max_digits=10, required=False)
 
     class Meta:
         model = ProductModel

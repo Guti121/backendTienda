@@ -8,9 +8,9 @@ class ReporteVentasDiario(models.Model):
     fecha = models.DateField()  # Guardamos por día, un informe por día
     facturas_total = models.IntegerField(default=0)
     productos_vendidos = models.IntegerField(default=0)
-    total_valor_mayor_und = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    total_valor_con_CF = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    total_subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_valor_mayor_und = models.DecimalField(max_digits=12, decimal_places=0, default=0)
+    total_valor_con_CF = models.DecimalField(max_digits=12, decimal_places=0, default=0)
+    total_subtotal = models.DecimalField(max_digits=12, decimal_places=0, default=0)
     creado_en = models.DateTimeField(auto_now_add=True)
     modificado_en = models.DateTimeField(auto_now=True)
 
@@ -27,9 +27,9 @@ class ReporteVentasMensual(models.Model):
     fecha = models.DateField() # Guardamos el primer día del mes
     facturas_total = models.IntegerField(default=0)
     productos_vendidos = models.IntegerField(default=0)
-    total_valor_mayor_und = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    total_valor_con_CF = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    total_subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total_valor_mayor_und = models.DecimalField(max_digits=12, decimal_places=0, default=0)
+    total_valor_con_CF = models.DecimalField(max_digits=12, decimal_places=0, default=0)
+    total_subtotal = models.DecimalField(max_digits=12, decimal_places=0, default=0)
     creado_en = models.DateTimeField(auto_now_add=True)
     modificado_en = models.DateTimeField(auto_now=True)
 

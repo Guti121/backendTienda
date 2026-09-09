@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from rest_framework.generics import CreateAPIView,DestroyAPIView,RetrieveAPIView
 from rest_framework import status
 from django.http import Http404
@@ -131,12 +131,14 @@ class PrecioSugeridoAPIView(APIView):
         return None
 
     def calculo_precio_sugerido(self, margen_ganancia, costos_fijos, unidades_proyectadas, valor_mayor):
-        costo_fijo_u = Decimal(costos_fijos) / Decimal(unidades_proyectadas)     
+        costo_fijo_u = Decimal(costos_fijos) / Decimal(unidades_proyectadas)
         costo_variable = Decimal(valor_mayor) + costo_fijo_u
         precio_unidad = costo_variable * (1 + Decimal(margen_ganancia))
 
+        # Precios en pesos enteros.
+        entero = lambda v: v.quantize(Decimal("1"), rounding=ROUND_HALF_UP)
         return Response({
-            'Precio_sugerido_Unidad': precio_unidad,
-            'ValorXmayor_CF': costo_variable,
+            'Precio_sugerido_Unidad': entero(precio_unidad),
+            'ValorXmayor_CF': entero(costo_variable),
             'Margen': margen_ganancia
         }, status=status.HTTP_200_OK)

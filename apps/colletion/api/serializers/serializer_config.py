@@ -1,6 +1,7 @@
 
 
 from rest_framework import serializers
+from apps.base.api.fields import PesosField
 from apps.colletion.models import Config_ProductModel
 
 
@@ -9,6 +10,9 @@ _CONFIG_FIELDS = ['id', 'costos_fijos', 'margen_ganancia',
 
 
 class CreateParametrosSerializer(serializers.ModelSerializer):
+    # costos_fijos = pesos enteros (margen_ganancia es un %, se deja con decimal).
+    costos_fijos = PesosField(max_digits=10, required=False)
+
     class Meta:
         model = Config_ProductModel
         fields = _CONFIG_FIELDS

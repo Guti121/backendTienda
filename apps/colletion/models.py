@@ -66,9 +66,10 @@ class ProductModel(BaseModel):
     nombre = models.CharField(max_length=100,unique=False,blank=False)
     tipo_producto = models.ForeignKey("colletion.TypeProductModel",related_name='Tipo_de_producto', on_delete=models.CASCADE)
     detalles = models.CharField(max_length=100)
-    valor_mayor=models.DecimalField(max_digits=10, decimal_places=2,blank=False)
-    valor_costos_fijos=models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    valor = models.DecimalField(max_digits=10, decimal_places=2,blank=False)
+    # Pesos colombianos: sin centavos (decimal_places=0).
+    valor_mayor=models.DecimalField(max_digits=10, decimal_places=0,blank=False)
+    valor_costos_fijos=models.DecimalField(max_digits=10, decimal_places=0, default=0)
+    valor = models.DecimalField(max_digits=10, decimal_places=0,blank=False)
     unidades_disponibles = models.PositiveIntegerField()
     disponible = models.BooleanField(default=True)
     numero_producto = models.CharField(max_length=5, unique=False, null=False, blank=True, db_index=True)
@@ -169,9 +170,10 @@ class Bar_codeModel(BaseModel):
 #config precios productos de productModels
 
 class Config_ProductModel(BaseModel):
-    #costos fijos totales mensuales 
-    costos_fijos=models.DecimalField(max_digits=10,decimal_places=2,blank=False)
-    #margen de ganacia que desea ganar en todos los productos 
+    #costos fijos totales mensuales (pesos, sin centavos)
+    costos_fijos=models.DecimalField(max_digits=10,decimal_places=0,blank=False)
+    #margen de ganancia (PORCENTAJE, ej. 35.0 -> se divide entre 100 al usarlo).
+    #Mantiene 1 decimal a propósito: es un %, no un importe.
     margen_ganancia=models.DecimalField(max_digits=3,decimal_places=1,default=0)
     #Promedio de productos vendidas mensualmente 
     promedio_productos_vendidos=models.IntegerField(blank=False)

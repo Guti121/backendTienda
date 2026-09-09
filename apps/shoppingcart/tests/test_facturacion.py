@@ -61,6 +61,30 @@ class FacturaCreateTest(TestCase):
         p.refresh_from_db()
         self.assertEqual(p.unidades_disponibles, 4)
 
+    def test_totales_enteros_y_borrado_repone_stock(self):
+        a = make_product(self.company, self.creador, stock=10,
+                         valor="1000", valor_mayor="600", tipo=self.tipo)
+        b = make_product(self.company, self.creador, stock=10, nombre="Prod B",
+                         valor="1500", valor_mayor="900", tipo=self.tipo)
+        r = self.client.post("/facturas/create/", {"detalles": [
+            {"producto": a.id, "cantidad": 2},
+            {"producto": b.id, "cantidad": 1},
+        ]}, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+
+        f = Factura.objects.get()
+        self.assertEqual(f.total, Decimal("3500"))  # 2*1000 + 1*1500, entero
+        for d in f.detalles.all():
+            self.assertEqual(d.subtotal, d.subtotal.to_integral_value())
+            self.assertEqual(d.valor_und, d.valor_und.to_integral_value())
+
+        r = self.client.delete(f"/facturas/destroy/{f.id}/")
+        self.assertIn(r.status_code, (200, 204), getattr(r, "data", r))
+        self.assertEqual(Factura.objects.count(), 0)
+        a.refresh_from_db(); b.refresh_from_db()
+        self.assertEqual(a.unidades_disponibles, 10)  # repuesto
+        self.assertEqual(b.unidades_disponibles, 10)
+
 
 class FacturaListTotalesTest(TestCase):
     def setUp(self):

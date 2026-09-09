@@ -56,6 +56,24 @@ class ProductCreateValidationTest(TestCase):
         self.assertNotEqual(p.numero_producto, "00000")
         self.assertTrue(p.disponible)
 
+    def test_precio_con_decimales_se_redondea_al_alta(self):
+        # El front puede mandar decimales; se redondea al peso (HALF_UP).
+        r = self._post(nombre="Con Centavos", valor="1234.56", valor_mayor="800.4")
+        self.assertEqual(r.status_code, 201, r.data)
+        p = ProductModel.objects.get(nombre="Con Centavos")
+        self.assertEqual(p.valor, Decimal("1235"))
+        self.assertEqual(p.valor_mayor, Decimal("800"))
+
+    def test_editar_precio_con_decimales_se_redondea(self):
+        self.assertEqual(self._post(nombre="Editable").status_code, 201)
+        p = ProductModel.objects.get(nombre="Editable")
+        r = self.client.patch(
+            f"/updateProduct/{p.id}/", {"valor": "999.4"}, format="json"
+        )
+        self.assertEqual(r.status_code, 200, r.data)
+        p.refresh_from_db()
+        self.assertEqual(p.valor, Decimal("999"))
+
 
 class ProductListPerfTest(TestCase):
     def setUp(self):
