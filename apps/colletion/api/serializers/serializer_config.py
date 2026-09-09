@@ -1,4 +1,4 @@
-
+from decimal import Decimal
 
 from rest_framework import serializers
 from apps.base.api.fields import PesosField
@@ -19,10 +19,34 @@ class CreateParametrosSerializer(serializers.ModelSerializer):
         # 'disponible' decide qué config está activa: lo maneja el servidor.
         read_only_fields = ['id', 'disponible']
 
-    # OJO: antes estos métodos estaban indentados dentro de `class Meta`, por lo
-    # que Django/DRF nunca los ejecutaba. Ahora viven en el serializer.
+    # Validaciones de rango: sin ellas se podían guardar configs inservibles
+    # (promedio 0 -> el cálculo siempre falla; costos_fijos negativos -> precio
+    # sugerido menor que el coste). En update parcial los campos omitidos ni se
+    # tocan ni se validan, así que solo se comprueba lo que llega.
+    def validate_costos_fijos(self, v):
+        if v is None or v <= 0:
+            raise serializers.ValidationError(
+                "Los costos fijos deben ser mayores que 0."
+            )
+        return v
+
+    def validate_promedio_productos_vendidos(self, v):
+        if v is None or v <= 0:
+            raise serializers.ValidationError(
+                "El promedio de productos vendidos debe ser mayor que 0."
+            )
+        return v
+
+    def validate_margen_ganancia(self, v):
+        if v is not None and (v < 0 or v > Decimal("999.9")):
+            raise serializers.ValidationError(
+                "El margen debe estar entre 0 y 999.9 %."
+            )
+        return v
+
     def validate(self, data):
-        if data.get('costos_fijos') is None:
+        # En creación (no partial) costos_fijos es obligatorio.
+        if not self.partial and data.get('costos_fijos') is None:
             raise serializers.ValidationError(
                 {"costos_fijos": "El campo 'costos_fijos' es requerido."}
             )

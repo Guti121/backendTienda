@@ -172,9 +172,9 @@ class Bar_codeModel(BaseModel):
 class Config_ProductModel(BaseModel):
     #costos fijos totales mensuales (pesos, sin centavos)
     costos_fijos=models.DecimalField(max_digits=10,decimal_places=0,blank=False)
-    #margen de ganancia (PORCENTAJE, ej. 35.0 -> se divide entre 100 al usarlo).
-    #Mantiene 1 decimal a propósito: es un %, no un importe.
-    margen_ganancia=models.DecimalField(max_digits=3,decimal_places=1,default=0)
+    #margen de ganancia: PORCENTAJE 0.0-999.9 (ej. 30.0 = 30%). Se divide entre
+    #100 al calcular el precio sugerido. Mantiene 1 decimal a propósito.
+    margen_ganancia=models.DecimalField(max_digits=5,decimal_places=1,default=0)
     #Promedio de productos vendidas mensualmente 
     promedio_productos_vendidos=models.IntegerField(blank=False)
 

@@ -1,9 +1,8 @@
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from rest_framework.generics import CreateAPIView,DestroyAPIView,RetrieveAPIView
 from rest_framework import status
 from django.http import Http404
 from rest_framework.response import Response
-from rest_framework.exceptions import ValidationError
 
 from Tienda_Virtual.globalFunctions import company_owner
 from apps.base.api.user.viewsPermissions import IsAdminOrCreator, isCreator
@@ -16,30 +15,32 @@ from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.views import APIView 
 
-#Creacion de parametros de configuracion
+#Configuración de parámetros: crear o actualizar (una por tienda).
 class CreacionParametrosAPIView(CreateAPIView):
     serializer_class = CreateParametrosSerializer
     permission_classes = [IsAuthenticated, isCreator]
     authentication_classes = [JWTAuthentication]
 
-    def perform_create(self, serializer):
-        """Evita la creación de duplicados y asigna la empresa antes de guardar."""
-        company = company_owner(self.request.user)  # Obtener la empresa del usuario
-        
-        # Verificar si ya existe un registro con esta tienda
-        if Config_ProductModel.objects.filter(tienda=company).exists():
-            raise ValidationError({"error": "Ya existen parámetros para esta tienda."})
-
-        # Si no existe, proceder con la creación
-        serializer.save(creado_por=self.request.user, tienda=company)
-
     def create(self, request, *args, **kwargs):
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        self.perform_create(serializer)  # Llama a perform_create para validar y guardar
+        """Upsert: si la tienda no tiene config la crea (201); si ya tiene, la
+        actualiza (200). Antes rechazaba con 400 si ya existía y no había forma
+        de editarla."""
+        company = company_owner(self.request.user)
+        instance = Config_ProductModel.objects.filter(tienda=company).first()
 
-        return Response({'message': 'Parámetros creados con éxito!'}, status=status.HTTP_201_CREATED)
+        serializer = self.get_serializer(
+            instance, data=request.data, partial=bool(instance)
+        )
+        serializer.is_valid(raise_exception=True)
+
+        if instance:
+            serializer.save(modificado_por=self.request.user)
+            return Response({'message': 'Parámetros actualizados.'},
+                            status=status.HTTP_200_OK)
+
+        serializer.save(creado_por=self.request.user, tienda=company)
+        return Response({'message': 'Parámetros creados con éxito!'},
+                        status=status.HTTP_201_CREATED)
     
 #Eliminar Parametros APIView
 class EliminacionParametrosAPIView(DestroyAPIView):
@@ -58,10 +59,9 @@ class EliminacionParametrosAPIView(DestroyAPIView):
         if not instance:
             return Response({"error": "No hay parámetros para eliminar."}, status=status.HTTP_404_NOT_FOUND)
 
-        # Verificar si el usuario autenticado es el creador del objeto
-        if instance.creado_por != request.user:
-            return Response({"error": "No tienes permisos para eliminar este objeto."}, status=status.HTTP_403_FORBIDDEN)
-
+        # `isCreator` + el filtro por tienda de get_queryset ya acotan quién puede
+        # borrar; no hace falta un check extra por `creado_por` (que además
+        # rompía si el creador de la tienda cambiaba).
         self.perform_destroy(instance)
         return Response({"message": "Parámetro eliminado exitosamente."}, status=status.HTTP_200_OK)
 
@@ -70,7 +70,9 @@ class EliminacionParametrosAPIView(DestroyAPIView):
 
 class ConfigProductoRetrieveAPIView(RetrieveAPIView):
     serializer_class = ListarParametrosSerializer
-    permission_classes = [IsAuthenticated,isCreator]
+    # Lectura: creator y admin (el admin usa el calculador y necesita ver la
+    # config). Crear/borrar siguen siendo solo del creator.
+    permission_classes = [IsAuthenticated, IsAdminOrCreator]
     authentication_classes = [JWTAuthentication]
 
     
@@ -100,9 +102,14 @@ class PrecioSugeridoAPIView(APIView):
     authentication_classes = [JWTAuthentication]
 
     def post(self, request):
-        valor_mayor = request.data.get('valor_mayor')
-        if valor_mayor is None or not isinstance(valor_mayor, int):
+        # Acepta entero, decimal o string numérico; rechaza texto, booleanos y <= 0.
+        raw = request.data.get('valor_mayor')
+        try:
+            valor_mayor = int(Decimal(str(raw)))
+        except (TypeError, ValueError, InvalidOperation):
             return Response({'error': 'Debes ingresar un monto valido'}, status=status.HTTP_400_BAD_REQUEST)
+        if valor_mayor <= 0:
+            return Response({'error': 'El Valor Coste debe ser mayor que 0.'}, status=status.HTTP_400_BAD_REQUEST)
 
         company= company_owner(self.request.user)
 
@@ -124,9 +131,19 @@ class PrecioSugeridoAPIView(APIView):
         return self.calculo_precio_sugerido(margen_ganancia, costos_fijos, unidades_proyectadas, valor_mayor)
 
     def obtener_margen_ganancia(self, datos, request):
-        if request.data.get('margen'):
-            return Decimal(request.data.get('margen')) / 100
-        elif datos.margen_ganancia is not None and datos.margen_ganancia != 0:
+        """Devuelve el margen como ratio (30 -> 0.30). El del body manda; si no,
+        el de la config. `None` si no hay ninguno válido (el caller responde 400,
+        no revienta)."""
+        raw = request.data.get('margen')
+        if raw not in (None, '', 0, '0'):
+            try:
+                m = Decimal(str(raw))
+            except InvalidOperation:
+                return None
+            if m < 0 or m > 999:
+                return None
+            return m / 100
+        if datos.margen_ganancia:
             return datos.margen_ganancia / 100
         return None
 
