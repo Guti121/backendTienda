@@ -24,6 +24,10 @@ class FacturaDetalle(BaseModel):
     valor_con_CF = models.DecimalField(max_digits=10,decimal_places=0,blank=False)
     subtotal = models.DecimalField(max_digits=10, decimal_places=0)
 
+    class Meta:
+        # Los reportes de inventario agregan por (tienda, rango de creado_en).
+        indexes = [models.Index(fields=['tienda', 'creado_en'], name='fd_tienda_creado_idx')]
+
     def save(self, *args, **kwargs):
         # Solo al CREAR: se congelan los valores del producto (snapshot histórico).
         # En un update posterior NO se re-copian, para no reescribir el importe de

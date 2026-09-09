@@ -1,7 +1,4 @@
-from django.contrib import admin
+from django.contrib import admin  # noqa: F401
 
-from apps.inventario.models import ReporteVentasDiario, ReporteVentasMensual
-
-# Register your models here.
-admin.site.register(ReporteVentasDiario)
-admin.site.register(ReporteVentasMensual)
+# El módulo de inventario no tiene modelos propios (los reportes se calculan al
+# leer desde FacturaDetalle).

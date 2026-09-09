@@ -20,22 +20,9 @@ app.config_from_object('django.conf:settings', namespace='CELERY')
 # Auto-descubre tareas en todos los apps (apps/*/tasks.py)
 app.autodiscover_tasks()
 
-
-from celery.schedules import crontab
-
-# Fuente única de las tareas programadas: este dict (versionado). django_celery_beat
-# sigue instalado pero NO se usa; si algún día se quiere editar horarios sin
-# desplegar, arrancar beat con --scheduler django_celery_beat.schedulers:DatabaseScheduler.
-app.conf.beat_schedule = {
-    'generar-reporte-ventas-cada-noche': {
-        'task': 'apps.inventario.tasks.generar_reporte_ventas_dia',
-        'schedule': crontab(minute=59, hour=23),
-    },
-    'generar-reporte-ventas-mensual': {
-        'task': 'apps.inventario.tasks.generar_reporte_ventas_mes',
-        'schedule': crontab(minute=0, hour=3, day_of_month='1'),
-    },
-}
+# Sin beat_schedule: los reportes de inventario se calculan al leer (no hay
+# tareas programadas). Celery se mantiene solo para tareas encoladas bajo
+# demanda (p. ej. el código de barras en apps/colletion/tasks.py).
 
 
 @app.task(bind=True)

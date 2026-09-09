@@ -80,6 +80,16 @@ CSRF_COOKIE_SECURE = True
 # Celery: la config base está en base.py (broker/backend por env, default Redis
 # local). Aquí no hace falta nada salvo, si se quiere, sobreescribir por env.
 
+# Caché: los reportes de inventario se calculan al leer y se cachean aquí. En
+# dev queda el LocMemCache por defecto; en prod se usa Redis (ya requerido como
+# broker). CACHE_REDIS_URL permite apuntar a otra instancia/db.
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': os.getenv('CACHE_REDIS_URL', CELERY_BROKER_URL),
+    }
+}
+
 # No es necesario configurar un directorio local con S3
 MEDIA_ROOT = None  	
 #onfiguración de S3

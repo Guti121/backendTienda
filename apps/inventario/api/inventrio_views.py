@@ -1,140 +1,192 @@
+"""Reportes de inventario calculados al leer desde `FacturaDetalle`.
+
+Antes se servían de tablas precalculadas (`ReporteVentasDiario/Mensual`) que solo
+llenaba Celery beat. Para el volumen del proyecto agregar en caliente por
+tienda/periodo es de milisegundos con el índice `(tienda, creado_en)`; la
+respuesta se cachea (ver `.cache`). Se usan rangos `[inicio, fin)` de
+`Tienda_Virtual.dateutils` en vez de `__date` / `__month` (que en MySQL dependen
+de las tz tables).
+"""
+import calendar
 from datetime import date
-from apps.colletion.models import ProductModel
-from rest_framework.response import Response
+
+from django.db.models import Count, DecimalField, ExpressionWrapper, F, Sum
 from rest_framework import status
-from django.db.models import F, DecimalField, ExpressionWrapper, Sum
-
-from rest_framework.generics import ListAPIView
-from rest_framework.views import APIView
-from apps.inventario.api.serializers.serializer import ReporteVentasDiarioSerializer, ReporteVentasMensualSerializer
-#Vista para realizar el inventario actual
-from rest_framework_simplejwt.authentication import JWTAuthentication
+from rest_framework.pagination import PageNumberPagination
 from rest_framework.permissions import IsAuthenticated
-from apps.base.api.user.viewsPermissions import isCreator
-from apps.inventario.models import ReporteVentasMensual,ReporteVentasDiario
-from django.db.models.functions import ExtractMonth,ExtractYear
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.authentication import JWTAuthentication
+
+from Tienda_Virtual.dateutils import day_bounds, month_bounds
 from Tienda_Virtual.globalFunctions import company_owner
+from apps.base.api.user.viewsPermissions import isCreator
+from apps.colletion.models import ProductModel
+from apps.shoppingcart.models import FacturaDetalle
+
+from .cache import cached_report
+
+# valor_mayor_und / valor_con_CF son TOTALES de línea (precio * cantidad), no
+# unitarios pese al nombre; ver FacturaDetalle.save().
+_AGG = {
+    "facturas_total": Count("factura", distinct=True),
+    "productos_vendidos": Sum("cantidad"),
+    "total_subtotal": Sum("subtotal"),
+    "total_valor_mayor_und": Sum("valor_mayor_und"),
+    "total_valor_con_CF": Sum("valor_con_CF"),
+}
 
 
-class InventarioView(ListAPIView):
-    serializer_class = ReporteVentasDiarioSerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated, isCreator]
-
-    def get_queryset(self):
-        user = self.request.user
-        owner_company = company_owner(user)
-        month = self.request.query_params.get('month')
-        year = self.request.query_params.get('year')
-
-        # order_by explícito: sin él la paginación es inconsistente (warning de DRF).
-        queryset = ReporteVentasDiario.objects.filter(tienda=owner_company).order_by('-fecha')
-
-        if month and year:
-            try:
-                month = int(month)
-                year = int(year)
-                queryset = queryset.annotate(
-                    month_field=ExtractMonth('fecha'),
-                    year_field=ExtractYear('fecha')
-                ).filter(month_field=month, year_field=year)
-            except ValueError:
-                pass  # Si no son números válidos, no filtramos
-
-        return queryset
-
-class InventarioMesView(ListAPIView):
-    serializer_class = ReporteVentasMensualSerializer
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated, isCreator]
-
-    def get_queryset(self):
-        user = self.request.user
-        owner_company = company_owner(user)
-        month = self.request.query_params.get('month')
-        year = self.request.query_params.get('year')
-
-        queryset = ReporteVentasMensual.objects.filter(tienda=owner_company).order_by('-fecha')
-
-        if month and year:
-            try:
-                month = int(month)
-                year = int(year)
-                queryset = queryset.annotate(
-                    month_field=ExtractMonth('fecha'),
-                    year_field=ExtractYear('fecha')
-                ).filter(month_field=month, year_field=year)
-            except ValueError:
-                pass
-
-        return queryset
+def _ventana(company, inicio, fin):
+    """Agrega FacturaDetalle de una tienda en [inicio, fin)."""
+    agg = FacturaDetalle.objects.filter(
+        tienda=company, creado_en__gte=inicio, creado_en__lt=fin
+    ).aggregate(**_AGG)
+    return {k: (agg[k] or 0) for k in _AGG}
 
 
-
-
-class ResumenVentasMensualView(APIView):
-    authentication_classes = [JWTAuthentication]
-    permission_classes = [IsAuthenticated, isCreator]
-
-    def get(self, request, *args, **kwargs):
-        user = request.user
-        owner_company = company_owner(user)
-
-        # Recibir mes y año desde la URL o usar valores actuales por defecto
-        try:
-            month = int(request.query_params.get('month', date.today().month))
-            year = int(request.query_params.get('year', date.today().year))
-        except ValueError:
-            return Response({"error": "El mes y año deben ser números válidos."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        if not (1 <= month <= 12):
-            return Response({"error": "El mes debe estar entre 1 y 12."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        if not (2000 <= year <= date.today().year + 1):
-            return Response({"error": "El año está fuera de rango."},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        reportes = ReporteVentasDiario.objects.annotate(
-            mes_anno=ExtractMonth('fecha'),
-            year_anno=ExtractYear('fecha')
-        ).filter(
-            mes_anno=month,
-            year_anno=year,
-            tienda=owner_company
+def _mes_anio(request):
+    """(month, year, error_response). Valores por defecto: mes/año actual."""
+    hoy = date.today()
+    try:
+        month = int(request.query_params.get("month", hoy.month))
+        year = int(request.query_params.get("year", hoy.year))
+    except (TypeError, ValueError):
+        return None, None, Response(
+            {"error": "El mes y año deben ser números válidos."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
-
-        resumen = reportes.aggregate(
-            total_productos_vendidos=Sum('productos_vendidos'),
-            total_valor_CF=Sum('total_valor_con_CF'),
-            total_subtotal=Sum('total_subtotal'),
-            total_valor_mayor=Sum('total_valor_mayor_und'),
+    if not (1 <= month <= 12):
+        return None, None, Response(
+            {"error": "El mes debe estar entre 1 y 12."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
+    if not (2000 <= year <= hoy.year + 1):
+        return None, None, Response(
+            {"error": "El año está fuera de rango."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    return month, year, None
 
-        return Response({
-            "mes": month,
-            "año": year,
-            "tienda": owner_company.name,
-            "resumen": {
-                "productos_vendidos": resumen["total_productos_vendidos"] or 0,
-                "costos_fijos_cubiertos": resumen["total_valor_CF"] or 0,
-                "valor_al_por_mayor": resumen["total_valor_mayor"] or 0,
-                "total_ventas": resumen["total_subtotal"] or 0,
-            }
-        }, status=status.HTTP_200_OK)
-    
 
-class InventarioProductos(APIView):
+def _paginated(request, view, filas):
+    paginator = PageNumberPagination()
+    page = paginator.paginate_queryset(filas, request, view=view)
+    return paginator.get_paginated_response(page)
+
+
+class InventarioView(APIView):
+    """GET /inventario/?month=&year=&page= — una fila por día con ventas."""
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated, isCreator]
 
     def get(self, request):
-        """Valoración del stock activo (solo productos con disponible=True).
+        company = company_owner(request.user)
+        month, year, err = _mes_anio(request)
+        if err:
+            return err
 
-        Totales en pesos enteros (DecimalField), coherente con el resto del
-        sistema sin centavos.
-        """
+        def build():
+            ndias = calendar.monthrange(year, month)[1]
+            filas = []
+            for d in range(ndias, 0, -1):  # más reciente primero
+                dia = date(year, month, d)
+                v = _ventana(company, *day_bounds(dia))
+                if not v["facturas_total"]:
+                    continue
+                filas.append({
+                    "fecha": dia.isoformat(),
+                    "facturas_total": v["facturas_total"],
+                    "productos_vendidos": v["productos_vendidos"],
+                    "total_subtotal": v["total_subtotal"],
+                })
+            return filas
+
+        filas = cached_report(company.id, f"daily:{year}-{month:02d}", build)
+        return _paginated(request, self, filas)
+
+
+class InventarioMesView(APIView):
+    """GET /inventario/mensual/ — un mes concreto (?month=&year=) o los últimos 12."""
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, isCreator]
+
+    def get(self, request):
+        company = company_owner(request.user)
+
+        def fila_mes(y, m):
+            v = _ventana(company, *month_bounds(y, m))
+            if not v["facturas_total"]:
+                return None
+            return {
+                "fecha": date(y, m, 1).isoformat(),
+                "facturas_total": v["facturas_total"],
+                "productos_vendidos": v["productos_vendidos"],
+                "total_valor_mayor_und": v["total_valor_mayor_und"],
+                "total_valor_con_CF": v["total_valor_con_CF"],
+                "total_subtotal": v["total_subtotal"],
+            }
+
+        if request.query_params.get("month") and request.query_params.get("year"):
+            month, year, err = _mes_anio(request)
+            if err:
+                return err
+            fila = cached_report(
+                company.id, f"month:{year}-{month:02d}", lambda: fila_mes(year, month)
+            )
+            return _paginated(request, self, [fila] if fila else [])
+
+        def build_12():
+            hoy = date.today()
+            y, m = hoy.year, hoy.month
+            filas = []
+            for _ in range(12):
+                fila = fila_mes(y, m)
+                if fila:
+                    filas.append(fila)
+                m -= 1
+                if m == 0:
+                    y, m = y - 1, 12
+            return filas
+
+        filas = cached_report(company.id, "monthly", build_12)
+        return _paginated(request, self, filas)
+
+
+class ResumenVentasMensualView(APIView):
+    """GET /inventario/resumen/?month=&year= — totales agregados del mes."""
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, isCreator]
+
+    def get(self, request):
+        company = company_owner(request.user)
+        month, year, err = _mes_anio(request)
+        if err:
+            return err
+
+        v = cached_report(
+            company.id, f"summary:{year}-{month:02d}",
+            lambda: _ventana(company, *month_bounds(year, month)),
+        )
+        return Response({
+            "mes": month,
+            "año": year,
+            "tienda": company.name,
+            "resumen": {
+                "productos_vendidos": v["productos_vendidos"],
+                "costos_fijos_cubiertos": v["total_valor_con_CF"],
+                "valor_al_por_mayor": v["total_valor_mayor_und"],
+                "total_ventas": v["total_subtotal"],
+            },
+        }, status=status.HTTP_200_OK)
+
+
+class InventarioProductos(APIView):
+    """GET /inventario/productos/ — valoración del stock activo (disponible=True)."""
+    authentication_classes = [JWTAuthentication]
+    permission_classes = [IsAuthenticated, isCreator]
+
+    def get(self, request):
         owner_company = company_owner(request.user)
         pesos = DecimalField(max_digits=20, decimal_places=0)
 
@@ -168,6 +220,6 @@ class InventarioProductos(APIView):
             "total_costos_fijos": totals["total_costos_fijos"] or 0,
         })
 
-    # Compat: la app llama por POST (sin cuerpo). Se mantiene como alias de GET.
+    # Compat: la app llama por POST (sin cuerpo). Alias de GET.
     def post(self, request):
         return self.get(request)
