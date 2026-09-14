@@ -16,6 +16,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+      # La primera vez (volumen vacío) mysql tarda en inicializar bastante más
+      # que 10 reintentos de 10s — visto en pruebas reales: >2 min. Sin esto,
+      # `docker compose up` da por "unhealthy" a la BD y web/worker/nginx
+      # nunca llegan a arrancar en el primer boot (hay que repetir `up -d`).
+      # Los reinicios posteriores (volumen ya con datos) son rápidos.
+      start_period: 120s
 
   redis:
     image: redis:7-alpine
