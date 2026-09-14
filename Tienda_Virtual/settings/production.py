@@ -20,6 +20,11 @@ def _csv(name):
     return [item.strip() for item in _required(name).split(',') if item.strip()]
 
 
+def _csv_optional(name, default=''):
+    """Como _csv() pero sin exigir la variable: lista vacía si no está seteada."""
+    return [item.strip() for item in os.getenv(name, default).split(',') if item.strip()]
+
+
 SECRET_KEY = _required('DJANGO_SECRET_KEY')
 
 # SECURITY WARNING: don't run with debug turned on in production!
@@ -28,6 +33,14 @@ DEBUG = os.getenv("DJANGO_DEBUG", "False") == "True"
 ALLOWED_HOSTS = _csv('DJANGO_ALLOWED_HOSTS')
 
 CORS_ALLOWED_ORIGINS = _csv('DJANGO_CORS_ALLOWED_ORIGINS')
+
+# Solo importa para /admin/ (login por cookie de sesión + CSRF de Django); la
+# API usa JWT (sin SessionAuthentication) y no pasa por esta validación.
+# Opcional a propósito: mientras no haya dominio + HTTPS (SECURE_SSL_REDIRECT
+# en False) el chequeo estricto de Referer ni se activa. Cuando haya dominio,
+# el mismo que nginx sirve, con esquema:
+# DJANGO_CSRF_TRUSTED_ORIGINS=https://tudominio.com
+CSRF_TRUSTED_ORIGINS = _csv_optional('DJANGO_CSRF_TRUSTED_ORIGINS')
 
 
 # Database
