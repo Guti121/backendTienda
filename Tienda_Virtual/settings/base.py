@@ -39,6 +39,15 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '60/min',
     },
+    # Sin esto, DRF identifica a quién limitar usando el X-Forwarded-For tal
+    # cual lo manda el cliente -> cualquiera evade el throttle mandando un
+    # valor distinto en cada request (verificado: bypass total). En
+    # producción hay exactamente 1 proxy de confianza delante (nginx, ver
+    # deploy/nginx/default.conf), que siempre AGREGA la IP real al final de
+    # X-Forwarded-For; con NUM_PROXIES=1, DRF toma esa última IP (la que puso
+    # nginx, no la que mandó el cliente). En dev/test no hay proxy real, pero
+    # tampoco hay exposición a atacantes.
+    'NUM_PROXIES': 1,
 }
 
 SIMPLE_JWT = {

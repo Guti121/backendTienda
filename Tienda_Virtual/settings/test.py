@@ -28,6 +28,10 @@ PASSWORD_HASHERS = ['django.contrib.auth.hashers.MD5PasswordHasher']
 # Media a un temporal (los tests suben imágenes de producto/logo).
 MEDIA_ROOT = os.path.join(tempfile.gettempdir(), 'tienda_test_media')
 MEDIA_URL = '/media/'
+# base.py no define STATIC_URL (solo local.py/production.py) -> sin esto,
+# cualquier test que renderice una plantilla de Django con {% static %}
+# (p. ej. /admin/login/) revienta con ImproperlyConfigured.
+STATIC_URL = '/static/'
 STORAGES = {
     'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
     'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
