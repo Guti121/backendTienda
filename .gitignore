@@ -34,6 +34,11 @@ staticfiles/
 Thumbs.db
 /barcodes
 /productos
+# Igual que /barcodes /productos: destino de MEDIA_ROOT en local.py (por eso
+# los uploads de dev caen sueltos en la raíz del repo). 19 archivos ya se
+# habían commiteado por accidente antes de esta línea (git rm --cached).
+/catalogo
+/profileCompany
 
 # Las migraciones SÍ se versionan (antes se ignoraban con */migrations/*.py,
 # lo que provocaba divergencias de esquema entre entornos).
