@@ -1,3 +1,4 @@
+import logging
 
 from apps.shoppingcart.api.serializers.serializersBarCode import BarCodeSerializer
 from rest_framework import status
@@ -17,9 +18,39 @@ from pyzbar.pyzbar import decode
 from PIL import Image
 import io
 
+logger = logging.getLogger(__name__)
+
+
+def _buscar_producto_por_codigo(company, code, cantidad_raw, serializer_class):
+    """Lógica compartida por los dos lectores (imagen y texto): valida
+    `cantidad`, busca el código en la tienda del usuario y revisa stock.
+    Devuelve la Response final (200 con el producto, o 400 con el motivo).
+    """
+    try:
+        cantidad = int(cantidad_raw)
+    except (TypeError, ValueError):
+        return Response({'error': 'La cantidad debe ser un número entero.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+    if cantidad <= 0:
+        return Response({'error': 'La cantidad debe ser mayor que 0.'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    barcode = Bar_codeModel.objects.filter(code=code, tienda=company).first()
+    if not barcode:
+        return Response({'mensaje': 'Código de barras no encontrado'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    producto = barcode.product
+    if not producto.disponible or producto.unidades_disponibles < cantidad:
+        return Response({'error': 'No se encuentra disponible ese stock del producto'},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    return Response(serializer_class(producto).data, status=status.HTTP_200_OK)
+
+
 class LecturaCodigoBarrasAPIView(APIView):
     permission_classes = [IsAuthenticated,IsWorkerOrCreator]
-    authentication_classes = [JWTAuthentication]  
+    authentication_classes = [JWTAuthentication]
     serializerClass = ProductModelFilterSerializer# Aquí se define el serializador
 
     def post(self, request):
@@ -28,83 +59,43 @@ class LecturaCodigoBarrasAPIView(APIView):
             return Response({'error': 'No se envió una imagen válida'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            # Leer la imagen desde el archivo subido
-            imagen = request.FILES['imagen']
-            cantidad = request.data.get('cantidad', 1)
-
-            # Convertir la imagen a un objeto PIL para procesarla
-            imagen_pil = Image.open(io.BytesIO(imagen.read()))
-
-            # Decodificar la imagen utilizando pyzbar
+            # Leer la imagen y decodificarla con pyzbar
+            imagen_pil = Image.open(io.BytesIO(request.FILES['imagen'].read()))
             codigos = decode(imagen_pil)
+        except Exception:
+            # Imagen corrupta/no soportada: es un problema del dato que mandó el
+            # cliente (400), no del servidor. El detalle real queda en el log,
+            # no se filtra en la respuesta.
+            logger.exception("No se pudo procesar la imagen del código de barras")
+            return Response({'error': 'No se pudo procesar la imagen.'},
+                            status=status.HTTP_400_BAD_REQUEST)
 
-            # Extraer los datos de los códigos de barras encontrados, si los hay
-            datos_codigos = [codigo.data.decode("utf-8") for codigo in codigos]
+        # Si no se encontraron códigos, retornar un mensaje apropiado
+        if not codigos:
+            return Response({'mensaje': 'No se encontraron códigos de barras en la imagen'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Si no se encontraron códigos, retornar un mensaje apropiado
-            if not datos_codigos:
-                return Response({'mensaje': 'No se encontraron códigos de barras en la imagen'}, status=status.HTTP_400_BAD_REQUEST)
+        company = company_owner(self.request.user)
+        return _buscar_producto_por_codigo(
+            company, codigos[0].data.decode("utf-8"),
+            request.data.get('cantidad', 1), self.serializerClass,
+        )
 
-            # Buscar en la base de datos el código de barras
-            company = company_owner(self.request.user)
-            barcode = Bar_codeModel.objects.filter(code=datos_codigos[0],tienda=company).first()
-
-            if barcode:
-                producto = barcode.product
-                if producto.disponible and int(producto.unidades_disponibles) >= int(cantidad):
-                    # Retorna el producto o cualquier detalle que necesites del producto
-                    serializer = self.serializerClass(producto)
-
-                    # Retornar la respuesta con los datos serializados
-                    return Response(serializer.data, status=status.HTTP_200_OK)
- 
-                else:
-                    return Response({'error': 'No se encuentra disponible ese stock del producto'}, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                return Response({'mensaje': 'Código de barras no encontrado'}, status=status.HTTP_204_NO_CONTENT)
-
-        except Exception as e:
-            # En caso de error, retornar un mensaje de error
-            return Response({'error': f'Ocurrió un error al procesar la imagen: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
 
 class LecturaCodigoBarrasTextAPIView(APIView):
     permission_classes = [IsAuthenticated,IsWorkerOrCreator]
-    authentication_classes = [JWTAuthentication]  
+    authentication_classes = [JWTAuthentication]
     serializerClass = ProductModelFilterSerializer# Aquí se define el serializador
 
     def post(self, request):
-        try:
-            # Leer la imagen desde el archivo subido
-            codigoBarras = request.data.get('codigoBarras')
-            cantidad = request.data.get('cantidad', 1)
+        codigoBarras = request.data.get('codigoBarras')
+        if not codigoBarras:
+            return Response({'mensaje': 'Debes enviar un código de barras'}, status=status.HTTP_400_BAD_REQUEST)
 
-            # Si no se encontraron códigos, retornar un mensaje apropiado
-            if not codigoBarras:
-                return Response({'mensaje': 'No se encontraron códigos de barras en la imagen'}, status=status.HTTP_400_BAD_REQUEST)
+        company = company_owner(self.request.user)
+        return _buscar_producto_por_codigo(
+            company, codigoBarras, request.data.get('cantidad', 1), self.serializerClass,
+        )
 
-            # Buscar en la base de datos el código de barras
-            company = company_owner(self.request.user)
-            
-            barcode = Bar_codeModel.objects.filter(code=codigoBarras,tienda = company).first()
-
-            if barcode:
-                producto = barcode.product
-                if producto.disponible and int(producto.unidades_disponibles) >= int(cantidad):
-                    # Serializar el producto con el serializador adecuado
-                    serializer = self.serializerClass(producto)
-
-                    # Retornar la respuesta con los datos serializados
-                    return Response(serializer.data, status=status.HTTP_200_OK)
-                else:
-                    return Response({'error': 'No se encuentra disponible ese stock del producto'}, status=status.HTTP_400_BAD_REQUEST)
-            else:
-                return Response({'mensaje': 'Código de barras no encontrado'}, status=status.HTTP_400_BAD_REQUEST)
-
-        except Exception as e:
-            # En caso de error, retornar un mensaje de error
-            return Response({'error': f'Ocurrió un error al procesar el codigo de barras'})
-        
 
 #Retrieve barCode
 class RetrieveBarCode(RetrieveAPIView):
@@ -116,11 +107,11 @@ class RetrieveBarCode(RetrieveAPIView):
     def get(self, request, *args, **kwargs):
         user = request.user
         tienda = company_owner(user)  # Suponiendo que retorna la tienda del usuario
-        
+
         if tienda:
             # Ahora buscamos el producto usando el pk y la tienda del usuario
             producto = get_object_or_404(
-                Bar_codeModel, 
+                Bar_codeModel,
                 product__id=kwargs.get('pk'),  # Buscamos por el pk del producto relacionado
                 product__tienda=tienda  # Aseguramos que el producto esté asociado a la tienda
             )

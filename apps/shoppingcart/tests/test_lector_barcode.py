@@ -126,13 +126,17 @@ class LectorTextoTest(LectorBase):
         r = self.client.post(URL_TXT, {"codigoBarras": cb.code, "cantidad": 4}, format="json")
         self.assertEqual(r.status_code, 200, r.data)
 
-    def test_cantidad_no_numerica_no_revienta_feo(self):
-        # QUIRK: el except del endpoint devuelve Response sin status -> 200 aunque
-        # int("abc") falló. Documenta el comportamiento actual (debería ser 400).
+    def test_cantidad_no_numerica_400(self):
         _, cb = self._producto("10008")
         r = self.client.post(URL_TXT, {"codigoBarras": cb.code, "cantidad": "abc"}, format="json")
-        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.status_code, 400)
         self.assertIn("error", r.data)
+
+    def test_cantidad_cero_o_negativa_400(self):
+        _, cb = self._producto("10009")
+        for cantidad in (0, -1):
+            r = self.client.post(URL_TXT, {"codigoBarras": cb.code, "cantidad": cantidad}, format="json")
+            self.assertEqual(r.status_code, 400)
 
 
 class LectorImagenTest(LectorBase):
@@ -159,14 +163,14 @@ class LectorImagenTest(LectorBase):
         self.assertEqual(r.status_code, 400)
         self.assertIn("mensaje", r.data)
 
-    def test_codigo_no_encontrado_devuelve_204(self):
-        # QUIRK: cuando el código decodifica pero no está en la BD, este endpoint
-        # responde 204 (No Content) con cuerpo — el de texto responde 400. Muchos
-        # clientes descartan el cuerpo de un 204.
+    def test_codigo_no_encontrado_400(self):
+        # Antes: 204 (con cuerpo) acá vs 400 en el endpoint de texto para el
+        # mismo caso. Ahora los dos responden igual.
         with mock.patch("apps.shoppingcart.api.codebar.decode",
                         return_value=fake_decode("7700123999998")):
             r = self.client.post(URL_IMG, {"imagen": self._img()}, format="multipart")
-        self.assertEqual(r.status_code, 204)
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("mensaje", r.data)
 
     def test_stock_insuficiente_400(self):
         _, cb = self._producto("20002", stock=1)
@@ -183,12 +187,22 @@ class LectorImagenTest(LectorBase):
         r = cc.post(URL_IMG, {"imagen": self._img()}, format="multipart")
         self.assertEqual(r.status_code, 403)
 
-    def test_imagen_corrupta_devuelve_500(self):
-        # QUIRK: cualquier excepción (aquí PIL no puede abrir la imagen) se
-        # traduce a 500 con str(e) en el cuerpo (fuga de detalle interno).
+    def test_imagen_corrupta_400_sin_filtrar_detalle(self):
+        # Antes: 500 con str(e) (el mensaje de PIL) metido en el cuerpo. Ahora
+        # es un 400 genérico (es un problema del dato que mandó el cliente,
+        # no del servidor) y no se filtra el detalle interno.
         bad = SimpleUploadedFile("x.png", b"no soy una imagen", content_type="image/png")
         r = self.client.post(URL_IMG, {"imagen": bad}, format="multipart")
-        self.assertEqual(r.status_code, 500)
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.data, {"error": "No se pudo procesar la imagen."})
+
+    def test_cantidad_cero_o_negativa_400(self):
+        _, cb = self._producto("20003")
+        with mock.patch("apps.shoppingcart.api.codebar.decode",
+                        return_value=fake_decode(cb.code)):
+            r = self.client.post(URL_IMG, {"imagen": self._img(), "cantidad": 0},
+                                 format="multipart")
+        self.assertEqual(r.status_code, 400)
 
 
 class LectorImagenRealTest(LectorBase):
