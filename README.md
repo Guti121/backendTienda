@@ -2,7 +2,7 @@
 
 API REST (Django + DRF) multi-tenant para gestión de tiendas: catálogo,
 códigos de barras EAN-13, facturación con control de stock, reportes de ventas
-(Celery) y catálogo público.
+(calculados al leer, con caché) y catálogo público.
 
 Análisis del proyecto y plan de optimización: **[`ANALISIS_Y_OPTIMIZACION.md`](ANALISIS_Y_OPTIMIZACION.md)**.
 
@@ -13,14 +13,21 @@ python -m venv venv
 venv/Scripts/activate           # Windows;  source venv/bin/activate en Linux/mac
 pip install -r requirements.txt
 cp .env.example .env            # y rellenar DB_* y DJANGO_SECRET_KEY
+# En .env, descomentar para desarrollo:
+#   DJANGO_SETTINGS_MODULE=Tienda_Virtual.settings.local
 
 python manage.py migrate
 python manage.py runserver
 ```
 
-`manage.py` usa `Tienda_Virtual.settings.local` (no versionado, por-desarrollador).
-En local, `CELERY_TASK_ALWAYS_EAGER = True` hace que las tareas corran en el acto
-sin necesitar Redis ni worker.
+`manage.py`/`wsgi.py`/`celery.py` usan `Tienda_Virtual.settings.production` **por
+defecto** — nunca se edita el módulo a mano en esos archivos. Lo que decide qué
+settings correr es la variable `DJANGO_SETTINGS_MODULE` en tu `.env` (no
+versionado, por-desarrollador): sin ella, todo intenta arrancar como producción
+y falla explícito si faltan `DB_*`/`AWS_*`/`DJANGO_ALLOWED_HOSTS` reales; con
+`DJANGO_SETTINGS_MODULE=Tienda_Virtual.settings.local` en tu `.env`, corre en
+modo desarrollo (`CELERY_TASK_ALWAYS_EAGER = True` hace que las tareas de
+Celery corran en el acto sin necesitar Redis ni worker).
 
 ## Settings
 
@@ -41,10 +48,13 @@ En CI (`.github/workflows/ci.yml`) corre en cada push/PR.
 
 ## Celery (cuando se necesite el flujo asíncrono real)
 
+Solo hace falta el `worker` (código de barras bajo demanda). No hay
+`beat_schedule`: los reportes de inventario se calculan al leer desde
+`FacturaDetalle`, con caché (ver `apps/inventario/api/cache.py`).
+
 ```bash
 # En otra terminal, con Redis levantado y CELERY_TASK_ALWAYS_EAGER=False:
 celery -A Tienda_Virtual worker -l info
-celery -A Tienda_Virtual beat   -l info      # tareas programadas (reportes)
 ```
 
 ## Comandos útiles
