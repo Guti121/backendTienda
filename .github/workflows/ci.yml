@@ -5,6 +5,17 @@ on:
     branches: ["main", "optimizacion/**"]
   pull_request:
 
+# Valores dummy para validar settings.production en CI. `check` no abre
+# conexión a la BD ni a S3, así que nunca tocan nada real — no son secretos
+# (no dan acceso a nada), por eso van inline y no en GitHub Secrets.
+env:
+  CI_DJANGO_SECRET_KEY: ci-solo-para-el-check-de-deploy-nunca-se-usa-en-real-0000000000
+  CI_ALLOWED_HOSTS: ci.example.com
+  CI_CORS_ORIGINS: https://ci.example.com
+  CI_AWS_KEY: ci-dummy
+  CI_AWS_SECRET: ci-dummy
+  CI_AWS_BUCKET: ci-dummy-bucket
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -36,3 +47,69 @@ jobs:
 
       - name: Tests
         run: python manage.py test -v 2
+
+  # Que settings/production.py siga arrancando (sintaxis + variables de
+  # entorno requeridas) sin esperar a descubrirlo recién en el servidor real.
+  deploy-check:
+    runs-on: ubuntu-latest
+    env:
+      DJANGO_SETTINGS_MODULE: Tienda_Virtual.settings.production
+      DJANGO_SECRET_KEY: ${{ env.CI_DJANGO_SECRET_KEY }}
+      DJANGO_DEBUG: "False"
+      DJANGO_ALLOWED_HOSTS: ${{ env.CI_ALLOWED_HOSTS }}
+      DJANGO_CORS_ALLOWED_ORIGINS: ${{ env.CI_CORS_ORIGINS }}
+      AWS_ACCESS_KEY_ID: ${{ env.CI_AWS_KEY }}
+      AWS_SECRET_ACCESS_KEY: ${{ env.CI_AWS_SECRET }}
+      AWS_STORAGE_BUCKET_NAME: ${{ env.CI_AWS_BUCKET }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+
+      - name: Dependencias del sistema (zbar para pyzbar, cliente MySQL)
+        run: sudo apt-get update && sudo apt-get install -y libzbar0 default-libmysqlclient-dev
+
+      - name: Instalar dependencias
+        run: pip install -r requirements.txt
+
+      - name: check --deploy contra settings.production
+        run: python manage.py check --deploy
+
+  # Que la imagen de despliegue siga armando (mysqlclient compila, pyzbar
+  # importa, con los paquetes de apt del Dockerfile) y que production.py
+  # cargue también DENTRO del contenedor, no solo en el runner de CI.
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build de la imagen
+        # --load: sin esto, con el driver docker-container (buildx) la imagen
+        # queda solo en la build cache y `docker run` de abajo no la encuentra
+        # (visto en local: build OK pero "docker images" no la listaba).
+        run: docker build --load -t backend-ci .
+
+      - name: docker compose config (sintaxis + interpolación de variables)
+        run: docker compose config
+        env:
+          DB_NAME: ci
+          DB_USER: ci
+          DB_PASSWORD: ci
+          DB_ROOT_PASSWORD: ci
+          GUNICORN_WORKERS: "2"
+
+      - name: La imagen arranca y resuelve settings.production (sin BD real)
+        run: >
+          docker run --rm
+          -e DJANGO_SETTINGS_MODULE=Tienda_Virtual.settings.production
+          -e DJANGO_SECRET_KEY="${{ env.CI_DJANGO_SECRET_KEY }}"
+          -e DJANGO_ALLOWED_HOSTS="${{ env.CI_ALLOWED_HOSTS }}"
+          -e DJANGO_CORS_ALLOWED_ORIGINS="${{ env.CI_CORS_ORIGINS }}"
+          -e AWS_ACCESS_KEY_ID="${{ env.CI_AWS_KEY }}"
+          -e AWS_SECRET_ACCESS_KEY="${{ env.CI_AWS_SECRET }}"
+          -e AWS_STORAGE_BUCKET_NAME="${{ env.CI_AWS_BUCKET }}"
+          backend-ci python manage.py check --deploy
