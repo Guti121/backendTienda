@@ -34,3 +34,17 @@ class CompanyCreateTest(TestCase):
         self.assertEqual(r.status_code, 201, r.data)
         fundador.profile.refresh_from_db()
         self.assertEqual(fundador.profile.tipo_usuario, TipoUsuario.CREATOR)
+
+    def test_url_logo_es_opcional(self):
+        # Crear la tienda no debería bloquearse por no tener un logo a mano.
+        fundador = make_user("fundador3", tipo=TipoUsuario.CLIENTE)
+        c = APIClient()
+        c.force_authenticate(user=fundador)
+        r = c.post("/store/createCompany/", {
+            "nit": "333444", "company": "SinLogo", "name": "sinlogotienda",
+            "phone": "1", "email": "sinlogo@test.com", "direction": "d",
+            "municipality": "m",
+        }, format="multipart")
+        self.assertEqual(r.status_code, 201, r.data)
+        company = Company.objects.get(name="sinlogotienda")
+        self.assertFalse(company.url_logo)

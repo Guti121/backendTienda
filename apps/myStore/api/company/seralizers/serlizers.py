@@ -6,6 +6,10 @@ from apps.myStore.models import Company
 
 # Serializador con validaciones
 class CreateCompanySerializer(serializers.ModelSerializer):
+    # Explícito aunque DRF ya lo infiere de Company.url_logo (blank=True):
+    # crear la tienda no debería bloquearse por no tener un logo a mano.
+    url_logo = serializers.ImageField(required=False)
+
     class Meta:
         model = Company
         fields = ['id', 'url_logo', 'nit', 'company', 'name', 'phone',

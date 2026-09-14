@@ -49,7 +49,10 @@ def upload_to_catalog_banner(instance, filename):
 
 
 class Company(models.Model):
-    url_logo = models.ImageField(upload_to='profileCompany',null=True)
+    # Opcional: crear la tienda no debería bloquearse por no tener un logo a
+    # mano. blank=True (no solo null=True) es lo que de verdad lo hace
+    # opcional: Company.save() llama a full_clean(), que valida `blank`.
+    url_logo = models.ImageField(upload_to='profileCompany', null=True, blank=True)
     nit = models.CharField(max_length=20, unique=True)  # NIT único
     company = models.CharField(max_length=255)
     name =models.CharField(
