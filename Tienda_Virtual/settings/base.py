@@ -59,7 +59,6 @@ BASE_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'django_celery_beat',
 ]
 
 #Aplicaciones Locales "las que yo realizo"
