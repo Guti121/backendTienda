@@ -63,3 +63,8 @@ celery -A Tienda_Virtual worker -l info
 python manage.py backfill_barcodes --dry-run   # productos sin código de barras
 python manage.py backfill_barcodes --sync      # generarlos en el acto
 ```
+
+## Desplegar (VPS con Docker)
+
+`Dockerfile` + `docker-compose.yml` (db, redis, web con gunicorn, worker,
+nginx). Guía completa: **[`DEPLOY.md`](DEPLOY.md)**.

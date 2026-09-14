@@ -1,0 +1,35 @@
+.git
+.gitignore
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*.log
+
+.env
+.env.*
+!.env.example
+!.env.production.example
+
+media/
+staticfiles/
+db.sqlite3
+celerybeat-schedule
+
+# Media local vieja (bug ya arreglado de MEDIA_ROOT en local.py); no entra a
+# la imagen, no se borra del repo.
+catalogo/
+profileCompany/
+barcodes/
+productos/
+
+.vscode/
+.DS_Store
+Thumbs.db
+
+Dockerfile
+docker-compose.yml
+DEPLOY.md
+README.md
+ANALISIS_Y_OPTIMIZACION.md
