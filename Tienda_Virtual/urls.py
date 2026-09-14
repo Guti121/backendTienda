@@ -22,7 +22,9 @@ from apps.base.api.token.views import CustomTokenObtainPairView, LogoutView, Reg
 from rest_framework_simplejwt.views import (
     TokenRefreshView
 )
+from .health import healthz
 urlpatterns = [
+    path('healthz/', healthz, name='healthz'),
     path('admin/', admin.site.urls),
     path('', include('apps.colletion.api.urls')),
     path('login/', CustomTokenObtainPairView.as_view(), name='token_obtain_pair'),

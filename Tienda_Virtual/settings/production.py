@@ -39,6 +39,9 @@ DATABASES = {
         'PASSWORD': os.getenv('DB_PASSWORD'),
         'HOST': os.getenv('DB_HOST', '127.0.0.1'),
         'PORT': os.getenv('DB_PORT', '3306'),
+        # Conexiones persistentes: con gunicorn multi-worker evita reabrir una
+        # conexión MySQL en cada request. 0 (default de Django) = como antes.
+        'CONN_MAX_AGE': int(os.getenv('DB_CONN_MAX_AGE', '60')),
         'OPTIONS': {
             'init_command': "SET sql_mode='STRICT_TRANS_TABLES'",
         }
@@ -55,14 +58,25 @@ STATIC_URL = '/static/'
 # Ruta absoluta donde se recogerán los archivos estáticos al hacer collectstatic
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-#config https 
+#config https
 # settings.py
 
-SECURE_SSL_REDIRECT = True
+# Detrás de nginx (reverse proxy) la conexión real del cliente puede ser HTTPS
+# aunque nginx le hable a Django por HTTP simple. Sin esto, Django nunca ve la
+# request como segura y SECURE_SSL_REDIRECT puede entrar en bucle de redirects.
+# nginx debe mandar X-Forwarded-Proto (ver deploy/nginx/default.conf).
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Configurables por env porque, mientras no haya dominio + certbot, nginx solo
+# sirve HTTP — forzar el redirect a HTTPS (o HSTS) dejaría el sitio
+# inalcanzable. En el .env del VPS: DJANGO_SECURE_SSL_REDIRECT=False y
+# DJANGO_SECURE_HSTS_SECONDS=0 hasta tener TLS; después se quitan (o se ponen
+# en True / 31536000) para recuperar la protección completa.
+SECURE_SSL_REDIRECT = os.getenv('DJANGO_SECURE_SSL_REDIRECT', 'True') == 'True'
 SECURE_BROWSER_XSS_FILTER = True
 
 # Activa HSTS y establece un tiempo de expiración
-SECURE_HSTS_SECONDS = 31536000  # 1 año en segundos
+SECURE_HSTS_SECONDS = int(os.getenv('DJANGO_SECURE_HSTS_SECONDS', '31536000'))  # 1 año en segundos
 SECURE_HSTS_INCLUDE_SUBDOMAINS = True  # Asegura que todos los subdominios también usen HTTPS
 SECURE_HSTS_PRELOAD = True  # Indica que tu dominio puede ser pre-cargado por los navegadores (opcional)
 
