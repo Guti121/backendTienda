@@ -2,8 +2,14 @@
 
 Todo corre en contenedores: `db` (MySQL), `redis`, `web` (gunicorn), `worker`
 (Celery, código de barras bajo demanda) y `nginx` (reverse proxy). Estático y
-media van a S3 (ya configurado en `settings/production.py`), así que el VPS no
-necesita disco para eso ni backups de imágenes.
+media quedan en dos volúmenes del propio VPS (`static_data`/`media_data`),
+servidos directo por nginx — **no hace falta S3 ni cuenta de AWS** para
+arrancar. Si en algún momento se quiere pasar a S3 (por ejemplo, correr varias
+instancias de `web` sin disco compartido), alcanza con `USE_S3=True` + las
+variables `AWS_*` en el `.env` (ver `.env.production.example`); nada más
+cambia. Ojo: en este modo (sin S3), el `mysqldump` de la sección de backups no
+alcanza — también hay que respaldar el volumen `media_data` (fotos de
+producto, logos) si se quiere poder recuperarlo todo.
 
 ## 1. Preparar el VPS
 
@@ -30,7 +36,7 @@ del compose) — no hace falta ni conviene abrirlos en el firewall.
 git clone <tu-repo> tienda-backend
 cd tienda-backend
 cp .env.production.example .env
-nano .env   # rellenar SECRET_KEY, ALLOWED_HOSTS (la IP del VPS), DB_*, AWS_*
+nano .env   # rellenar SECRET_KEY, ALLOWED_HOSTS (la IP del VPS), DB_*
 ```
 
 Puntos clave del `.env` (ver comentarios en `.env.production.example`):
@@ -100,6 +106,9 @@ docker compose exec web python manage.py migrate
 - `GUNICORN_WORKERS` en `.env` (default 3): regla general, `2 × núcleos + 1`.
 - Sin backup automatizado todavía: `docker compose exec db mysqldump -u root
   -p"$DB_ROOT_PASSWORD" tienda > backup.sql` a mano, o programar un cron con
-  ese comando.
+  ese comando. Sin S3, las fotos (productos, logos) viven en el volumen
+  `media_data` — respaldarlo también: `docker run --rm -v
+  backendtienda_media_data:/data -v "$PWD":/backup alpine tar czf
+  /backup/media.tar.gz -C /data .`
 - No hay monitoreo de errores (Sentry ni similar) — un 500 en producción hoy
   solo se ve con `docker compose logs web`.

@@ -33,6 +33,7 @@ DEBUG = os.getenv("DJANGO_DEBUG", "False") == "True"
 ALLOWED_HOSTS = _csv('DJANGO_ALLOWED_HOSTS')
 
 CORS_ALLOWED_ORIGINS = _csv('DJANGO_CORS_ALLOWED_ORIGINS')
+CORS_ALLOW_CREDENTIALS = True
 
 # Solo importa para /admin/ (login por cookie de sesión + CSRF de Django); la
 # API usa JWT (sin SessionAuthentication) y no pasa por esta validación.
@@ -61,15 +62,6 @@ DATABASES = {
     }
 }
 
-
-# Static files (CSS, JavaScript, Images)
-# https://docs.djangoproject.com/en/4.2/howto/static-files/
-
-# Ruta para servir archivos estáticos en desarrollo y producción
-STATIC_URL = '/static/'
-
-# Ruta absoluta donde se recogerán los archivos estáticos al hacer collectstatic
-STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
 #config https
 # settings.py
@@ -117,34 +109,44 @@ CACHES = {
     }
 }
 
-# No es necesario configurar un directorio local con S3
-MEDIA_ROOT = None  	
-#onfiguración de S3
-AWS_ACCESS_KEY_ID = _required('AWS_ACCESS_KEY_ID')
-AWS_SECRET_ACCESS_KEY = _required('AWS_SECRET_ACCESS_KEY')
-AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', 'us-east-1')  # Cambia por tu región
-AWS_STORAGE_BUCKET_NAME = _required('AWS_STORAGE_BUCKET_NAME')
+# --- Estático y media ---
+# Por defecto: filesystem local, en un volumen del compose que comparten
+# `web` (lo escribe) y `nginx` (lo sirve directo, ver deploy/nginx/default.conf
+# — bypassea a Django/gunicorn para esos paths, que es lo correcto en prod).
+# Sin S3 no hace falta ninguna cuenta/credencial de AWS para arrancar.
+#
+# Si más adelante SÍ se quiere S3 (por ejemplo, correr varias instancias de
+# `web` sin volumen compartido, o servir media desde un CDN): poner
+# USE_S3=True + las 3 variables AWS_* en el .env. Nada más del código cambia
+# (django-storages/boto3 ya están en requirements.txt).
+USE_S3 = os.getenv('USE_S3', 'False') == 'True'
 
+if USE_S3:
+    AWS_ACCESS_KEY_ID = _required('AWS_ACCESS_KEY_ID')
+    AWS_SECRET_ACCESS_KEY = _required('AWS_SECRET_ACCESS_KEY')
+    AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME', 'us-east-1')  # Cambia por tu región
+    AWS_STORAGE_BUCKET_NAME = _required('AWS_STORAGE_BUCKET_NAME')
+    AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
 
-AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
+    MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
+    STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/static/'
 
-# URL base para acceder a los archivos de medios
-MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/media/'
+    # STORAGES es la forma vigente (STATICFILES_STORAGE / DEFAULT_FILE_STORAGE
+    # se quitaron en Django 5.1).
+    STORAGES = {
+        'staticfiles': {'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage'},
+        'default': {'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage'},
+    }
+else:
+    STATIC_URL = '/static/'
+    STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')  # colectado por `collectstatic`
+    MEDIA_URL = '/media/'
+    MEDIA_ROOT = os.path.join(BASE_DIR, 'media')          # subido por los usuarios
 
-STATIC_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/static/'
-
-CORS_ALLOW_CREDENTIALS = True
-
-# STORAGES es la forma vigente (STATICFILES_STORAGE / DEFAULT_FILE_STORAGE se
-# quitaron en Django 5.1).
-STORAGES = {
-    'staticfiles': {
-        'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',
-    },
-    'default': {
-        'BACKEND': 'storages.backends.s3boto3.S3Boto3Storage',
-    },
-}
+    STORAGES = {
+        'staticfiles': {'BACKEND': 'django.contrib.staticfiles.storage.StaticFilesStorage'},
+        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    }
 
 # Otros ajustes
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

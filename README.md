@@ -36,7 +36,7 @@ Celery corran en el acto sin necesitar Redis ni worker).
 | `settings/base.py` | Común (apps, DRF, JWT, Celery, logging) |
 | `settings/local.py` | Desarrollo (no versionado) |
 | `settings/test.py` | Suite de tests (SQLite en memoria, Celery eager) |
-| `settings/production.py` | HTTPS/HSTS, S3, todo por variables de entorno |
+| `settings/production.py` | HTTPS/HSTS, estático/media local (S3 opcional con `USE_S3=True`), todo por variables de entorno |
 
 ## Tests
 

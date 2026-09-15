@@ -12,16 +12,25 @@ services:
     # Sin `ports:` a propósito: solo se ve desde la red interna del compose,
     # no queda expuesto a internet.
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p${DB_ROOT_PASSWORD}"]
+      # -h 127.0.0.1 --protocol=TCP a propósito, NO "-h localhost" (eso usa el
+      # socket Unix). El entrypoint de mysql arranca un servidor TEMPORAL
+      # mientras crea la BD/usuario, que responde ping por socket pero NO
+      # tiene networking (puerto 0) — con "-h localhost" el healthcheck daba
+      # "healthy" contra ese servidor temporal, web/worker arrancaban, y se
+      # encontraban con que el puerto 3306 real todavía no existía (~3 min
+      # más) hasta que el servidor definitivo reemplazaba al temporal.
+      # Forzando TCP al puerto 3306 el check solo pasa contra el servidor real.
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-P", "3306", "--protocol=TCP", "-uroot", "-p${DB_ROOT_PASSWORD}"]
       interval: 10s
       timeout: 5s
       retries: 10
       # La primera vez (volumen vacío) mysql tarda en inicializar bastante más
-      # que 10 reintentos de 10s — visto en pruebas reales: >2 min. Sin esto,
-      # `docker compose up` da por "unhealthy" a la BD y web/worker/nginx
-      # nunca llegan a arrancar en el primer boot (hay que repetir `up -d`).
-      # Los reinicios posteriores (volumen ya con datos) son rápidos.
-      start_period: 120s
+      # que 10 reintentos de 10s — visto en pruebas reales: >3 min contando el
+      # servidor temporal + el real. Sin esto, `docker compose up` da por
+      # "unhealthy" a la BD y web/worker/nginx nunca llegan a arrancar en el
+      # primer boot (hay que repetir `up -d`). Los reinicios posteriores
+      # (volumen ya con datos, sin servidor temporal) son rápidos.
+      start_period: 180s
 
   redis:
     image: redis:7-alpine
@@ -34,11 +43,32 @@ services:
       timeout: 5s
       retries: 10
 
+  # Un named volume nuevo lo crea Docker vacío y dueño de root — appuser (el
+  # usuario no-root de la imagen, ver Dockerfile) no puede escribir ahí hasta
+  # que alguien lo chequee. Este servicio corre una vez, como root, deja los
+  # permisos bien, y termina (`service_completed_successfully`) antes de que
+  # arranquen web/worker/nginx. Sin esto, `collectstatic` y las subidas de
+  # media fallan con PermissionError la primera vez (volumen recién creado).
+  volume-init:
+    build: .
+    user: root
+    entrypoint: ["sh", "-c", "mkdir -p /app/staticfiles /app/media && chown -R appuser:appuser /app/staticfiles /app/media"]
+    volumes:
+      - static_data:/app/staticfiles
+      - media_data:/app/media
+
   web:
     build: .
     restart: unless-stopped
     env_file: .env
+    volumes:
+      # Sin S3 (USE_S3=False, el default): estático/media quedan en disco,
+      # en un volumen que también monta `nginx` para servirlos directo.
+      - static_data:/app/staticfiles
+      - media_data:/app/media
     depends_on:
+      volume-init:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       redis:
@@ -62,7 +92,15 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    volumes:
+      # El código de barras (generado async acá) también es media (ImageField
+      # -> MEDIA_ROOT). Sin este mismo volumen, se escribiría en el disco
+      # efímero del contenedor: se perdería al reiniciar y nginx (que sirve
+      # desde media_data) nunca lo vería.
+      - media_data:/app/media
     depends_on:
+      volume-init:
+        condition: service_completed_successfully
       db:
         condition: service_healthy
       redis:
@@ -76,6 +114,10 @@ services:
       - "80:80"
     volumes:
       - ./deploy/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      # Mismos volúmenes que `web`, en modo lectura: nginx los sirve directo,
+      # sin pasar por gunicorn/Django.
+      - static_data:/app/staticfiles:ro
+      - media_data:/app/media:ro
     depends_on:
       web:
         condition: service_healthy
@@ -83,3 +125,5 @@ services:
 volumes:
   mysql_data:
   redis_data:
+  static_data:
+  media_data:
