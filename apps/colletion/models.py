@@ -1,8 +1,12 @@
 import random
 import barcode
+from decimal import Decimal
 from barcode.writer import ImageWriter
 from django.core.files.base import ContentFile
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models,transaction
+from django.db.models import Prefetch
+from django.utils import timezone
 from io import BytesIO
 from django.core.files import File
 from apps.myStore.models import BaseModel
@@ -154,7 +158,63 @@ class ProductModel(BaseModel):
 
     def __str__(self):
         return f'{self.id} , {self.nombre}, {self.unidades_disponibles}'
-    
+
+
+class DescuentoProducto(BaseModel):
+    """Promoción de porcentaje sobre un producto, con vigencia (fecha_inicio -
+    fecha_fin) y `activo` como interruptor manual independiente de las fechas.
+
+    Solo puede haber una promo activa por producto a la vez: al guardar una
+    con `activo=True` se desactivan las demás del mismo producto (ver save()).
+    Así se conserva el historial (no se rechaza el alta, se reemplaza la
+    vigente), a diferencia de `Config_ProductModel` que no tiene historial.
+    """
+    producto = models.ForeignKey(
+        "colletion.ProductModel", related_name="descuentos", on_delete=models.CASCADE
+    )
+    porcentaje = models.DecimalField(
+        max_digits=5, decimal_places=2,
+        validators=[MinValueValidator(Decimal("0.01")), MaxValueValidator(Decimal("100"))],
+    )
+    fecha_inicio = models.DateTimeField()
+    fecha_fin = models.DateTimeField()
+    activo = models.BooleanField(default=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['producto', 'activo'])]
+
+    def clean(self):
+        if self.fecha_fin and self.fecha_inicio and self.fecha_fin <= self.fecha_inicio:
+            raise ValidationError("fecha_fin debe ser posterior a fecha_inicio.")
+
+    def save(self, *args, **kwargs):
+        super().save(*args, **kwargs)
+        if self.activo:
+            DescuentoProducto.objects.filter(
+                producto_id=self.producto_id, activo=True
+            ).exclude(pk=self.pk).update(activo=False)
+
+    @property
+    def vigente(self):
+        now = timezone.now()
+        return self.activo and self.fecha_inicio <= now <= self.fecha_fin
+
+    @staticmethod
+    def prefetch_vigentes():
+        """Prefetch de la(s) promo(s) vigente(s) de cada producto, para poder
+        leer `producto.descuentos_vigentes` en un listado sin N+1."""
+        now = timezone.now()
+        return Prefetch(
+            'descuentos',
+            queryset=DescuentoProducto.objects.filter(
+                activo=True, fecha_inicio__lte=now, fecha_fin__gte=now
+            ),
+            to_attr='descuentos_vigentes',
+        )
+
+    def __str__(self):
+        return f"{self.id} - {self.producto.nombre} -{self.porcentaje}%"
+
 
 class Bar_codeModel(BaseModel):
     product = models.OneToOneField("colletion.ProductModel",related_name="producto", on_delete=models.CASCADE)

@@ -3,7 +3,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.pagination import PageNumberPagination
 from apps.catalogo.api.serializers.serializers import CatalogoProductListSerializer, CatalogoProductRetrieveSerializer, CatalogoTipoProductListSerializer
 from rest_framework.generics import ListAPIView,RetrieveAPIView
-from apps.colletion.models import ProductModel, TypeProductModel
+from apps.colletion.models import DescuentoProducto, ProductModel, TypeProductModel
 from django.shortcuts import get_object_or_404
 from apps.myStore.models import Company
 
@@ -43,7 +43,7 @@ class CatalogoListView(ListAPIView):
         queryset = (ProductModel.objects
                     .filter(disponible=True, publicar=True, tienda=tienda)
                     .select_related('tipo_producto')
-                    .prefetch_related('imagenes')
+                    .prefetch_related('imagenes', DescuentoProducto.prefetch_vigentes())
                     .order_by('-creado_en'))
 
         # Búsqueda por nombre (substring, case-insensitive por la collation de
@@ -86,7 +86,8 @@ class CatalogoProductRetrieveView(RetrieveAPIView):
 
         tienda = get_object_or_404(Company, name__iexact=name_param)
         product = get_object_or_404(
-            ProductModel.objects.select_related('tipo_producto').prefetch_related('imagenes'),
+            ProductModel.objects.select_related('tipo_producto')
+                .prefetch_related('imagenes', DescuentoProducto.prefetch_vigentes()),
             id=product_id, tienda=tienda, disponible=True, publicar=True,
         )
         

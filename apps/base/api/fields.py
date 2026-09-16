@@ -5,6 +5,15 @@ from decimal import Decimal, ROUND_HALF_UP, InvalidOperation
 from rest_framework import serializers
 
 
+def redondear_pesos(valor):
+    """Redondea un importe en pesos colombianos al entero más cercano (HALF_UP).
+
+    Único punto de redondeo de dinero, reusado por `PesosField` y por el
+    cálculo de descuentos (producto/factura) para que ambos redondeen igual.
+    """
+    return Decimal(valor).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+
 class PesosField(serializers.DecimalField):
     """Importe en pesos colombianos: entero, sin centavos.
 
@@ -20,9 +29,7 @@ class PesosField(serializers.DecimalField):
 
     def to_internal_value(self, data):
         try:
-            data = Decimal(str(data)).quantize(
-                Decimal("1"), rounding=ROUND_HALF_UP
-            )
+            data = redondear_pesos(Decimal(str(data)))
         except (InvalidOperation, TypeError, ValueError):
             # que DRF lance su error normal ("Se requiere un número válido.")
             pass

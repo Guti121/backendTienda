@@ -1,8 +1,32 @@
+from decimal import Decimal
+
 from django.utils import timezone
 from Tienda_Virtual.globalFunctions import company_owner
 from rest_framework import serializers
-from apps.base.api.fields import PesosField
+from apps.base.api.fields import PesosField, redondear_pesos
 from ...models import ProductImage, ProductModel,TypeProductModel
+
+
+def _descuento_vigente_de(obj):
+    """El `DescuentoProducto` vigente de `obj` (o `None`), leído del prefetch
+    `descuentos_vigentes` (`DescuentoProducto.prefetch_vigentes()`) — nunca
+    dispara una query propia."""
+    vigentes = getattr(obj, 'descuentos_vigentes', None)
+    if vigentes is None:
+        return None
+    return vigentes[0] if vigentes else None
+
+
+def _descuento_porcentaje_de(obj):
+    descuento = _descuento_vigente_de(obj)
+    return descuento.porcentaje if descuento else Decimal('0')
+
+
+def _valor_con_descuento_de(obj):
+    pct = _descuento_porcentaje_de(obj)
+    if not pct:
+        return obj.valor
+    return redondear_pesos(obj.valor * (1 - pct / 100))
 
 
 def _abs_media(serializer, url):
@@ -104,53 +128,76 @@ class ProductModelSerializer(serializers.ModelSerializer):
 #serializador para listFilter View
 class ProductModelListFilterSerializer(serializers.ModelSerializer):
     imagen_principal = serializers.SerializerMethodField()
+    descuento_porcentaje = serializers.SerializerMethodField()
+    valor_con_descuento = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductModel
-        fields = ['id','imagen_principal','nombre','tipo_producto','detalles','valor','unidades_disponibles','numero_producto']
+        fields = ['id','imagen_principal','nombre','tipo_producto','detalles','valor','unidades_disponibles','numero_producto','descuento_porcentaje','valor_con_descuento']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        
+
         # Aquí cambiamos el campo 'categoria' de ID a 'nombre'
-        category_name = instance.tipo_producto.tipo_producto  
+        category_name = instance.tipo_producto.tipo_producto
         representation['tipo_producto'] = category_name
-        
+
         return representation
-    
+
     def get_imagen_principal(self, obj):
         # Recorre en Python el prefetch 'imagenes' (no .filter(), que dispararía
         # una query por fila y rompería el prefetch_related).
         principal = next((img for img in obj.imagenes.all() if img.principal), None)
         return _abs_media(self, principal.imagen.url) if principal else None
 
+    def get_descuento_porcentaje(self, obj):
+        return _descuento_porcentaje_de(obj)
+
+    def get_valor_con_descuento(self, obj):
+        return _valor_con_descuento_de(obj)
+
 
 ##serializador para retrieve product
 class ProductModelRetrieveProductSerializer(serializers.ModelSerializer):
     imagenes = ProductImageSerializer(many=True, read_only=True)
+    descuento_porcentaje = serializers.SerializerMethodField()
+    valor_con_descuento = serializers.SerializerMethodField()
 
 
     class Meta:
         model = ProductModel
-        fields = ['id','imagenes','nombre','tipo_producto','detalles','valor','unidades_disponibles','numero_producto']
+        fields = ['id','imagenes','nombre','tipo_producto','detalles','valor','unidades_disponibles','numero_producto','descuento_porcentaje','valor_con_descuento']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        
+
         # Aquí cambiamos el campo 'categoria' de ID a 'nombre'
-        category_name = instance.tipo_producto.tipo_producto  
+        category_name = instance.tipo_producto.tipo_producto
         representation['tipo_producto'] = category_name
-        
+
         return representation
-    
+
+    def get_descuento_porcentaje(self, obj):
+        return _descuento_porcentaje_de(obj)
+
+    def get_valor_con_descuento(self, obj):
+        return _valor_con_descuento_de(obj)
+
 class ProductModelRetrieveProductCreatorSerializer(serializers.ModelSerializer):
     imagenes = ProductImageSerializer(many=True, read_only=True)
+    descuento_porcentaje = serializers.SerializerMethodField()
+    valor_con_descuento = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductModel
-        fields = ['id','nombre','imagenes','tipo_producto','detalles','valor','valor_mayor','valor_costos_fijos','unidades_disponibles','numero_producto','publicar']
+        fields = ['id','nombre','imagenes','tipo_producto','detalles','valor','valor_mayor','valor_costos_fijos','unidades_disponibles','numero_producto','publicar','descuento_porcentaje','valor_con_descuento']
 
-    
+    def get_descuento_porcentaje(self, obj):
+        return _descuento_porcentaje_de(obj)
+
+    def get_valor_con_descuento(self, obj):
+        return _valor_con_descuento_de(obj)
+
     def get_imagen_principal(self, obj):
         imagen = obj.imagen_principal()
         return _abs_media(self, imagen.imagen.url) if imagen else None

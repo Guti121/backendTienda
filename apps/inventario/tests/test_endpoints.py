@@ -18,6 +18,7 @@ def make_venta(company, creador, producto, cantidad, cuando=None):
     producto; subtotal se pasa a mano. `cuando` (aware) fuerza creado_en
     (auto_now_add) vía UPDATE posterior."""
     factura = Factura.objects.create(
+        subtotal=Decimal(producto.valor) * cantidad,
         total=Decimal(producto.valor) * cantidad, tienda=company, creado_por=creador,
     )
     det = FacturaDetalle.objects.create(

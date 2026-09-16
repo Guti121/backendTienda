@@ -158,7 +158,7 @@ class Command(BaseCommand):
 
     def _factura(self, company, user, lineas):
         with transaction.atomic():
-            factura = Factura.objects.create(total=Decimal("0"), tienda=company, creado_por=user)
+            factura = Factura.objects.create(subtotal=Decimal("0"), total=Decimal("0"), tienda=company, creado_por=user)
             total = Decimal("0")
             for producto, cant in lineas:
                 sub = producto.valor * cant
@@ -171,6 +171,7 @@ class Command(BaseCommand):
                     producto.disponible = False
                 producto.save()
                 total += sub
+            factura.subtotal = total
             factura.total = total
             factura.save()
         return factura

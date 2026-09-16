@@ -8,7 +8,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from apps.base.models import TipoUsuario
-from apps.base.tests.factories import make_company, make_product, make_tipo, make_user
+from apps.base.tests.factories import make_company, make_descuento, make_product, make_tipo, make_user
 from apps.colletion.models import ProductModel
 from apps.shoppingcart.models import Factura, FacturaDetalle
 
@@ -81,7 +81,8 @@ class SnapshotInmutableTest(TestCase):
         self.p = make_product(self.company, self.creador, "P", stock=10, valor="1000")
 
     def test_facturadetalle_no_resnapshotea_al_reguardar(self):
-        f = Factura.objects.create(total=Decimal("2000"), tienda=self.company, creado_por=self.creador)
+        f = Factura.objects.create(subtotal=Decimal("2000"), total=Decimal("2000"),
+                                   tienda=self.company, creado_por=self.creador)
         d = FacturaDetalle.objects.create(factura=f, producto=self.p, cantidad=2,
                                           subtotal=Decimal("2000"), tienda=self.company,
                                           creado_por=self.creador)
@@ -96,13 +97,34 @@ class SnapshotInmutableTest(TestCase):
         self.assertEqual(d.valor_und, Decimal("1000"))
         self.assertNotEqual(d.nombre_producto, "Renombrado")
 
+    def test_descuento_de_linea_no_cambia_si_la_promo_se_desactiva_despues(self):
+        from apps.base.tests.factories import make_company as _mc
+        company, creador = _mc(nombre="tiendasnapshot", email="snap@test.com", nit="900555")
+        tipo = make_tipo(company, creador)
+        p = make_product(company, creador, "PromoP", stock=10, valor="1000", tipo=tipo)
+        promo = make_descuento(p, creador, porcentaje="20")
+
+        client = APIClient(); client.force_authenticate(creador)
+        r = client.post("/facturas/create/",
+                        {"detalles": [{"producto": p.id, "cantidad": 1}]}, format="json")
+        self.assertEqual(r.status_code, 201, r.data)
+        d = FacturaDetalle.objects.get(factura_id=r.data["factura_id"])
+        self.assertEqual(d.descuento_porcentaje, Decimal("20"))
+
+        promo.activo = False
+        promo.save()
+        d.refresh_from_db()
+        d.save()
+        d.refresh_from_db()
+        self.assertEqual(d.descuento_porcentaje, Decimal("20"))  # sin cambios
+
 
 class ProtectCreadoPorTest(TestCase):
     def test_no_se_puede_borrar_usuario_que_creo_facturas(self):
         company, creador = make_company()
         worker = make_user("wrk", tipo=TipoUsuario.WORKER, company=company)
         p = make_product(company, creador, "P", stock=10)
-        Factura.objects.create(total=Decimal("1"), tienda=company, creado_por=worker)
+        Factura.objects.create(subtotal=Decimal("1"), total=Decimal("1"), tienda=company, creado_por=worker)
         with self.assertRaises(ProtectedError):
             worker.delete()
 
@@ -116,7 +138,7 @@ class ProtectCreadoPorTest(TestCase):
         # creado_por sea PROTECT (PROTECT solo aplica al borrar el usuario).
         company, creador = make_company()
         p = make_product(company, creador, "P", stock=10)
-        Factura.objects.create(total=Decimal("1"), tienda=company, creado_por=creador)
+        Factura.objects.create(subtotal=Decimal("1"), total=Decimal("1"), tienda=company, creado_por=creador)
         cid = company.id
         company.delete()
         self.assertFalse(ProductModel.objects.filter(tienda_id=cid).exists())
@@ -131,7 +153,7 @@ class BorrarProductoConVentasTest(TestCase):
 
     def test_producto_con_ventas_no_se_borra(self):
         p = make_product(self.company, self.creador, "ConVentas", stock=10, tipo=self.tipo)
-        f = Factura.objects.create(total=p.valor, tienda=self.company, creado_por=self.creador)
+        f = Factura.objects.create(subtotal=p.valor, total=p.valor, tienda=self.company, creado_por=self.creador)
         FacturaDetalle.objects.create(factura=f, producto=p, cantidad=1, subtotal=p.valor,
                                       tienda=self.company, creado_por=self.creador)
         r = self.c.delete(f"/destroyproduct/{p.id}/")

@@ -1,11 +1,13 @@
 """Helpers compartidos por la suite de tests (no es un módulo de tests)."""
 import base64
+from datetime import timedelta
 from decimal import Decimal
 
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
 
 from apps.base.models import CustomUser, TipoUsuario, UserProfile
-from apps.colletion.models import ProductModel, TypeProductModel
+from apps.colletion.models import DescuentoProducto, ProductModel, TypeProductModel
 from apps.myStore.models import Company
 
 # PNG 1x1 válido (los serializers DRF validan que sea una imagen real).
@@ -54,4 +56,13 @@ def make_product(company, creador, nombre="Producto A", stock=10, valor="1000",
         nombre=nombre, tipo_producto=tipo, detalles="x",
         valor_mayor=Decimal(valor_mayor), valor=Decimal(valor),
         unidades_disponibles=stock, tienda=company, creado_por=creador,
+    )
+
+
+def make_descuento(producto, creador, porcentaje="10", dias=7, activo=True, inicio=None):
+    inicio = inicio or timezone.now()
+    return DescuentoProducto.objects.create(
+        producto=producto, porcentaje=Decimal(porcentaje),
+        fecha_inicio=inicio, fecha_fin=inicio + timedelta(days=dias),
+        activo=activo, tienda=producto.tienda, creado_por=creador,
     )

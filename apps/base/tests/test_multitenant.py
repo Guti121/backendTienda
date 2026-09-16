@@ -30,7 +30,7 @@ class MultiTenantIsolationTest(TestCase):
         Config_ProductModel.objects.create(
             tienda=self.B, creado_por=self.beto, costos_fijos=Decimal("1000"),
             margen_ganancia=Decimal("1"), promedio_productos_vendidos=10)
-        self.fB = Factura.objects.create(total=Decimal("100"), tienda=self.B, creado_por=self.beto)
+        self.fB = Factura.objects.create(subtotal=Decimal("100"), total=Decimal("100"), tienda=self.B, creado_por=self.beto)
         FacturaDetalle.objects.create(factura=self.fB, producto=self.pB, cantidad=1,
                                       subtotal=Decimal("100"), tienda=self.B, creado_por=self.beto)
         self.workerB = make_user("wb", tipo=TipoUsuario.WORKER, company=self.B)
@@ -80,7 +80,7 @@ class MultiTenantIsolationTest(TestCase):
         self.assertTrue(Factura.objects.filter(id=self.fB.id).exists())
 
     def test_A_lista_solo_sus_facturas(self):
-        Factura.objects.create(total=Decimal("1"), tienda=self.A, creado_por=self.ana)
+        Factura.objects.create(subtotal=Decimal("1"), total=Decimal("1"), tienda=self.A, creado_por=self.ana)
         r = self.ana_c.get("/facturas/")
         self.assertEqual(r.data["numero_de_facturas"], Factura.objects.filter(tienda=self.A).count())
 

@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from apps.base.tests.factories import make_company, make_product, make_tipo
+from apps.base.tests.factories import make_company, make_descuento, make_product, make_tipo
 from apps.colletion.models import ProductModel
 from apps.shoppingcart.models import Factura, FacturaDetalle
 
@@ -84,6 +84,85 @@ class FacturaCreateTest(TestCase):
         a.refresh_from_db(); b.refresh_from_db()
         self.assertEqual(a.unidades_disponibles, 10)  # repuesto
         self.assertEqual(b.unidades_disponibles, 10)
+
+
+class FacturaConDescuentoTest(TestCase):
+    def setUp(self):
+        self.company, self.creador = make_company()
+        self.tipo = make_tipo(self.company, self.creador)
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.creador)
+
+    def _venta(self, detalles, descuento_porcentaje=None):
+        payload = {"detalles": detalles}
+        if descuento_porcentaje is not None:
+            payload["descuento_porcentaje"] = descuento_porcentaje
+        return self.client.post("/facturas/create/", payload, format="json")
+
+    def test_promo_de_producto_se_aplica_sola_sin_input_explicito(self):
+        p = make_product(self.company, self.creador, valor="1000", tipo=self.tipo)
+        make_descuento(p, self.creador, porcentaje="20")
+        r = self._venta([{"producto": p.id, "cantidad": 2}])
+        self.assertEqual(r.status_code, 201, r.data)
+        f = Factura.objects.get()
+        d = f.detalles.get()
+        self.assertEqual(d.descuento_porcentaje, Decimal("20"))
+        self.assertEqual(d.subtotal, Decimal("1600"))  # 2*1000*0.8
+        self.assertEqual(f.subtotal, Decimal("1600"))
+        self.assertEqual(f.total, Decimal("1600"))  # sin descuento general
+
+    def test_descuento_general_de_factura_sin_promo_de_producto(self):
+        p = make_product(self.company, self.creador, valor="1000", tipo=self.tipo)
+        r = self._venta([{"producto": p.id, "cantidad": 2}], descuento_porcentaje="10")
+        self.assertEqual(r.status_code, 201, r.data)
+        f = Factura.objects.get()
+        self.assertEqual(f.subtotal, Decimal("2000"))
+        self.assertEqual(f.total, Decimal("1800"))  # 2000 * 0.9
+        self.assertEqual(f.descuento_porcentaje, Decimal("10"))
+
+    def test_override_por_linea_sin_promo(self):
+        p = make_product(self.company, self.creador, valor="1000", tipo=self.tipo)
+        r = self._venta([{"producto": p.id, "cantidad": 1, "descuento_porcentaje": "30"}])
+        self.assertEqual(r.status_code, 201, r.data)
+        d = Factura.objects.get().detalles.get()
+        self.assertEqual(d.descuento_porcentaje, Decimal("30"))
+        self.assertEqual(d.subtotal, Decimal("700"))
+
+    def test_override_de_linea_gana_sobre_la_promo_del_producto(self):
+        p = make_product(self.company, self.creador, valor="1000", tipo=self.tipo)
+        make_descuento(p, self.creador, porcentaje="20")
+        r = self._venta([{"producto": p.id, "cantidad": 1, "descuento_porcentaje": "5"}])
+        self.assertEqual(r.status_code, 201, r.data)
+        d = Factura.objects.get().detalles.get()
+        self.assertEqual(d.descuento_porcentaje, Decimal("5"))  # no 20
+        self.assertEqual(d.subtotal, Decimal("950"))
+
+    def test_cero_explicito_anula_la_promo_de_esa_linea(self):
+        p = make_product(self.company, self.creador, valor="1000", tipo=self.tipo)
+        make_descuento(p, self.creador, porcentaje="20")
+        r = self._venta([{"producto": p.id, "cantidad": 1, "descuento_porcentaje": "0"}])
+        self.assertEqual(r.status_code, 201, r.data)
+        d = Factura.objects.get().detalles.get()
+        self.assertEqual(d.descuento_porcentaje, Decimal("0"))
+        self.assertEqual(d.subtotal, Decimal("1000"))
+
+    def test_promo_de_producto_y_descuento_general_combinados(self):
+        p = make_product(self.company, self.creador, valor="1000", tipo=self.tipo)
+        make_descuento(p, self.creador, porcentaje="10")
+        r = self._venta([{"producto": p.id, "cantidad": 1}], descuento_porcentaje="10")
+        self.assertEqual(r.status_code, 201, r.data)
+        f = Factura.objects.get()
+        # línea: 1000 * 0.9 = 900 (subtotal). factura: 900 * 0.9 = 810.
+        self.assertEqual(f.subtotal, Decimal("900"))
+        self.assertEqual(f.total, Decimal("810"))
+
+    def test_porcentaje_fuera_de_rango_400(self):
+        p = make_product(self.company, self.creador, valor="1000", tipo=self.tipo)
+        r = self._venta([{"producto": p.id, "cantidad": 1}], descuento_porcentaje="150")
+        self.assertEqual(r.status_code, 400, r.data)
+
+        r = self._venta([{"producto": p.id, "cantidad": 1, "descuento_porcentaje": "-5"}])
+        self.assertEqual(r.status_code, 400, r.data)
 
 
 class FacturaListTotalesTest(TestCase):

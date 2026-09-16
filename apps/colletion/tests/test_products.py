@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
-from apps.base.tests.factories import make_company, make_tipo, png_file
+from apps.base.tests.factories import make_company, make_descuento, make_product, make_tipo, png_file
 from apps.colletion.models import ProductImage, ProductModel
 
 
@@ -118,3 +118,26 @@ class ProductListPerfTest(TestCase):
 
         r = self.client.get("/product/", {"q": "texto-basura"})
         self.assertIn(r.status_code, (200, 404))  # nunca 500
+
+
+class ProductoConDescuentoSerializerTest(TestCase):
+    def setUp(self):
+        self.company, self.creador = make_company()
+        self.tipo = make_tipo(self.company, self.creador)
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.creador)
+
+    def test_sin_promo_descuento_cero_y_valor_sin_cambios(self):
+        make_product(self.company, self.creador, "Sin Promo", valor="1000", tipo=self.tipo)
+        r = self.client.get("/product/")
+        item = r.data["results"][0] if "results" in r.data else r.data[0]
+        self.assertEqual(Decimal(str(item["descuento_porcentaje"])), Decimal("0"))
+        self.assertEqual(Decimal(str(item["valor_con_descuento"])), Decimal("1000"))
+
+    def test_con_promo_vigente_descuenta_el_precio(self):
+        p = make_product(self.company, self.creador, "Con Promo", valor="1000", tipo=self.tipo)
+        make_descuento(p, self.creador, porcentaje="20")
+        r = self.client.get(f"/productDetail/{p.id}/")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(Decimal(str(r.data["descuento_porcentaje"])), Decimal("20"))
+        self.assertEqual(Decimal(str(r.data["valor_con_descuento"])), Decimal("800"))

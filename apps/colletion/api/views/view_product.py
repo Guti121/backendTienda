@@ -5,7 +5,7 @@ from rest_framework import generics
 from rest_framework.generics import DestroyAPIView,ListAPIView
 from Tienda_Virtual.globalFunctions import company_owner, profile_user
 from apps.base.api.user.viewsPermissions import IsAdminOrCreator, IsWorkerOrCreator, isCreator, isWorker
-from apps.colletion.models import ProductImage, ProductModel
+from apps.colletion.models import DescuentoProducto, ProductImage, ProductModel
 from apps.colletion.api.serializers.serializer import ProductModelListFilterSerializer, ProductModelRetrieveProductCreatorSerializer, ProductModelRetrieveProductSerializer,ProductModelSerializer,ProductModelDestroySerializer, ProductModelUpdateProductSerializer
 from rest_framework.response import Response
 from rest_framework import status
@@ -22,7 +22,7 @@ def _productos_de(company):
     return (ProductModel.objects
             .filter(tienda=company)
             .select_related('tipo_producto')
-            .prefetch_related('imagenes')
+            .prefetch_related('imagenes', DescuentoProducto.prefetch_vigentes())
             .order_by('id'))  # orden estable por defecto (paginación determinista)
 
 
