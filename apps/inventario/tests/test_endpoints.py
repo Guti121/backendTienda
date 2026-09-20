@@ -13,13 +13,15 @@ from apps.base.tests.factories import make_company, make_product, make_user
 from apps.shoppingcart.models import Factura, FacturaDetalle
 
 
-def make_venta(company, creador, producto, cantidad, cuando=None):
+def make_venta(company, creador, producto, cantidad, cuando=None, descuento=0):
     """Factura de una línea. FacturaDetalle.save() congela el snapshot del
     producto; subtotal se pasa a mano. `cuando` (aware) fuerza creado_en
-    (auto_now_add) vía UPDATE posterior."""
+    (auto_now_add) vía UPDATE posterior. `descuento` = % general de la factura."""
+    bruto = Decimal(producto.valor) * cantidad
     factura = Factura.objects.create(
-        subtotal=Decimal(producto.valor) * cantidad,
-        total=Decimal(producto.valor) * cantidad, tienda=company, creado_por=creador,
+        subtotal=bruto, descuento_porcentaje=descuento,
+        total=bruto * (100 - Decimal(descuento)) / 100,
+        tienda=company, creado_por=creador,
     )
     det = FacturaDetalle.objects.create(
         factura=factura, producto=producto, cantidad=cantidad,
@@ -114,6 +116,33 @@ class InventarioResumenYMensualTest(TestCase):
         res = r.data["resumen"]
         self.assertEqual(res["productos_vendidos"], 4)
         self.assertEqual(Decimal(str(res["total_ventas"])), Decimal("4000"))
+
+    def test_total_ventas_descuenta_el_descuento_general(self):
+        make_venta(self.company, self.creador, self.prod, 4, descuento=10)
+        make_venta(self.company, self.creador, self.prod, 1)
+        hoy = date.today()
+        q = f"?month={hoy.month}&year={hoy.year}"
+
+        r = self.client.get(f"/inventario/resumen/{q}")
+        # 4000 con 10% = 3600, + 1000 sin descuento
+        self.assertEqual(Decimal(str(r.data["resumen"]["total_ventas"])), Decimal("4600"))
+
+        r = self.client.get(f"/inventario/{q}")
+        self.assertEqual(Decimal(str(r.data["results"][0]["total_subtotal"])), Decimal("4600"))
+
+    def test_factura_multilinea_no_multiplica_el_total(self):
+        otro = make_product(self.company, self.creador, nombre="Otro", valor="500")
+        factura = make_venta(self.company, self.creador, self.prod, 1)
+        FacturaDetalle.objects.create(
+            factura=factura, producto=otro, cantidad=2, subtotal=Decimal("1000"),
+            valor_und=0, valor_mayor_und=0, valor_con_CF=0,
+            tienda=self.company, creado_por=self.creador,
+        )
+        Factura.objects.filter(pk=factura.pk).update(total=Decimal("2000"))
+        hoy = date.today()
+        r = self.client.get(f"/inventario/resumen/?month={hoy.month}&year={hoy.year}")
+        self.assertEqual(Decimal(str(r.data["resumen"]["total_ventas"])), Decimal("2000"))
+        self.assertEqual(r.data["resumen"]["productos_vendidos"], 3)
 
     def test_resumen_valida(self):
         self.assertEqual(self.client.get("/inventario/resumen/?month=13").status_code, 400)

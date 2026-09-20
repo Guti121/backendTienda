@@ -22,7 +22,7 @@ from Tienda_Virtual.dateutils import day_bounds, month_bounds
 from Tienda_Virtual.globalFunctions import company_owner
 from apps.base.api.user.viewsPermissions import isCreator
 from apps.colletion.models import ProductModel
-from apps.shoppingcart.models import FacturaDetalle
+from apps.shoppingcart.models import Factura, FacturaDetalle
 
 from .cache import cached_report
 
@@ -31,18 +31,28 @@ from .cache import cached_report
 _AGG = {
     "facturas_total": Count("factura", distinct=True),
     "productos_vendidos": Sum("cantidad"),
-    "total_subtotal": Sum("subtotal"),
     "total_valor_mayor_und": Sum("valor_mayor_und"),
     "total_valor_con_CF": Sum("valor_con_CF"),
 }
 
 
 def _ventana(company, inicio, fin):
-    """Agrega FacturaDetalle de una tienda en [inicio, fin)."""
-    agg = FacturaDetalle.objects.filter(
+    """Agrega FacturaDetalle de una tienda en [inicio, fin).
+
+    `total_subtotal` (lo vendido en pesos) sale de `Factura.total`, que ya
+    descuenta el % general de la venta; sumar `FacturaDetalle.subtotal` lo
+    ignoraría. Se agrega aparte para no inflar la suma con el join a detalles.
+    """
+    detalles = FacturaDetalle.objects.filter(
         tienda=company, creado_en__gte=inicio, creado_en__lt=fin
-    ).aggregate(**_AGG)
-    return {k: (agg[k] or 0) for k in _AGG}
+    )
+    agg = detalles.aggregate(**_AGG)
+    total = Factura.objects.filter(
+        pk__in=detalles.values("factura")
+    ).aggregate(t=Sum("total"))["t"]
+    res = {k: (agg[k] or 0) for k in _AGG}
+    res["total_subtotal"] = total or 0
+    return res
 
 
 def _mes_anio(request):
