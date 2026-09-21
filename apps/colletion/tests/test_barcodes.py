@@ -3,7 +3,10 @@ from unittest import mock
 
 from django.conf import settings
 from django.core.management import call_command
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
+from rest_framework.test import APIClient
 
 from apps.base.tests.factories import make_company, make_tipo
 from apps.colletion.models import Bar_codeModel, ProductModel
@@ -166,3 +169,45 @@ class NumeroProductoTest(TestCase):
         self.assertEqual(code_a, code_b)
         # Y ambas filas conviven: Bar_codeModel.code no tiene unique.
         self.assertEqual(Bar_codeModel.objects.filter(code=code_a).count(), 2)
+
+
+class ListadoAdminCodigoBarrasTest(TestCase):
+    """El listado admin trae `codigo_barras` (impresión de etiquetas en lote)."""
+
+    def setUp(self):
+        self.company, self.creador = make_company()
+        self.tipo = make_tipo(self.company, self.creador)
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.creador)
+
+    def _producto(self, nombre, con_codigo=True):
+        p = ProductModel(
+            nombre=nombre, tipo_producto=self.tipo, detalles="x",
+            valor_mayor=Decimal("500"), valor=Decimal("1000"),
+            unidades_disponibles=5, numero_producto=str(60000 + ProductModel.objects.count()),
+            tienda=self.company, creado_por=self.creador,
+        )
+        super(ProductModel, p).save()  # sin encolar la tarea
+        if con_codigo:
+            p.crear_codigo_barras()
+        return p
+
+    def test_trae_el_codigo_o_null_si_aun_no_existe(self):
+        con = self._producto("Con")
+        self._producto("Sin", con_codigo=False)
+        r = self.client.get("/product/")
+        self.assertEqual(r.status_code, 200, r.data)
+        por_nombre = {i["nombre"]: i["codigo_barras"] for i in r.data["results"]}
+        self.assertEqual(por_nombre["Con"], Bar_codeModel.objects.get(product=con).code)
+        self.assertIsNone(por_nombre["Sin"])
+
+    def test_sin_n_mas_1(self):
+        for i in range(2):
+            self._producto(f"A{i}")
+        with CaptureQueriesContext(connection) as q2:
+            self.client.get("/product/")
+        for i in range(5):
+            self._producto(f"B{i}")
+        with CaptureQueriesContext(connection) as q7:
+            self.client.get("/product/")
+        self.assertEqual(len(q2.captured_queries), len(q7.captured_queries))

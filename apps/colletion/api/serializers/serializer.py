@@ -4,7 +4,7 @@ from django.utils import timezone
 from Tienda_Virtual.globalFunctions import company_owner
 from rest_framework import serializers
 from apps.base.api.fields import PesosField, redondear_pesos
-from ...models import ProductImage, ProductModel,TypeProductModel
+from ...models import Bar_codeModel, ProductImage, ProductModel,TypeProductModel
 
 
 def _descuento_vigente_de(obj):
@@ -130,10 +130,11 @@ class ProductModelListFilterSerializer(serializers.ModelSerializer):
     imagen_principal = serializers.SerializerMethodField()
     descuento_porcentaje = serializers.SerializerMethodField()
     valor_con_descuento = serializers.SerializerMethodField()
+    codigo_barras = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductModel
-        fields = ['id','imagen_principal','nombre','tipo_producto','detalles','valor','unidades_disponibles','numero_producto','descuento_porcentaje','valor_con_descuento']
+        fields = ['id','imagen_principal','nombre','tipo_producto','detalles','valor','unidades_disponibles','numero_producto','descuento_porcentaje','valor_con_descuento','codigo_barras']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -155,6 +156,14 @@ class ProductModelListFilterSerializer(serializers.ModelSerializer):
 
     def get_valor_con_descuento(self, obj):
         return _valor_con_descuento_de(obj)
+
+    def get_codigo_barras(self, obj):
+        # Número EAN-13 (para imprimir etiquetas en lote). `producto` es el
+        # related_name del OneToOne de Bar_codeModel; viene con select_related.
+        try:
+            return obj.producto.code
+        except Bar_codeModel.DoesNotExist:
+            return None
 
 
 ##serializador para retrieve product

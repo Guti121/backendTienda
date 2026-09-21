@@ -21,7 +21,7 @@ def _productos_de(company):
     serializers ya cargadas (evita N+1 por 'tipo_producto' e 'imagenes')."""
     return (ProductModel.objects
             .filter(tienda=company)
-            .select_related('tipo_producto')
+            .select_related('tipo_producto', 'producto')
             .prefetch_related('imagenes', DescuentoProducto.prefetch_vigentes())
             .order_by('id'))  # orden estable por defecto (paginación determinista)
 
