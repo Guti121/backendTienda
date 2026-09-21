@@ -7,4 +7,4 @@ class BarCodeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Bar_codeModel
-        fields = ['nombre', 'barcode']
+        fields = ['nombre', 'barcode', 'code']

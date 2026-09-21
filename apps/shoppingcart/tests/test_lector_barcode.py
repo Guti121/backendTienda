@@ -240,6 +240,8 @@ class RetrieveBarCodeTest(LectorBase):
         self.assertEqual(r.status_code, 200, r.data)
         self.assertEqual(r.data["nombre"], p.nombre)
         self.assertIn("barcode", r.data)
+        # El número se usa para dibujar la etiqueta en vector en el cliente.
+        self.assertEqual(r.data["code"], cb.code)
 
     def test_producto_de_otra_tienda_404(self):
         otra, cr = make_company(nombre="tiendaB", email="b@test.com", nit="900002")
