@@ -134,7 +134,7 @@ class ProductModelListFilterSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ProductModel
-        fields = ['id','imagen_principal','nombre','tipo_producto','detalles','valor','unidades_disponibles','numero_producto','descuento_porcentaje','valor_con_descuento','codigo_barras']
+        fields = ['id','imagen_principal','nombre','tipo_producto','detalles','valor','unidades_disponibles','numero_producto','descuento_porcentaje','valor_con_descuento','codigo_barras','publicar']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)

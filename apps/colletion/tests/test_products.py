@@ -120,6 +120,28 @@ class ProductListPerfTest(TestCase):
         self.assertIn(r.status_code, (200, 404))  # nunca 500
 
 
+class ListadoAdminIncluyePublicarTest(TestCase):
+    """El listado admin (`/product/`) trae `publicar`: en la app se ve sin
+    tener que entrar al detalle de cada producto."""
+
+    def setUp(self):
+        self.company, self.creador = make_company()
+        self.tipo = make_tipo(self.company, self.creador)
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.creador)
+
+    def test_trae_publicar(self):
+        privado = make_product(self.company, self.creador, "Privado", tipo=self.tipo)
+        publico = make_product(self.company, self.creador, "Publico", tipo=self.tipo)
+        ProductModel.objects.filter(pk=publico.pk).update(publicar=True)
+
+        r = self.client.get("/product/")
+        self.assertEqual(r.status_code, 200, r.data)
+        por_nombre = {p["nombre"]: p["publicar"] for p in r.data["results"]}
+        self.assertFalse(por_nombre["Privado"])
+        self.assertTrue(por_nombre["Publico"])
+
+
 class ProductoConDescuentoSerializerTest(TestCase):
     def setUp(self):
         self.company, self.creador = make_company()
