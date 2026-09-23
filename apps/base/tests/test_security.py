@@ -62,6 +62,24 @@ class ThrottleYFuerzaBrutaTest(_CacheAisladaTestCase):
         self.assertNotIn(429, codes)
 
 
+class CatalogoThrottleTest(_CacheAisladaTestCase):
+    """El scope 'catalogo' (600/min) es más generoso que 'anon' (60/min):
+    el SSR de catalog-web comparte un solo cubo entre todas las tiendas y
+    todas las visitas, y una sola ficha de producto ya son varios requests."""
+
+    def test_mas_de_60_requests_no_se_cortan(self):
+        company, _ = make_company(nombre="sectest5", email="sec5@test.com", nit="900995")
+        c = APIClient()
+        codes = [c.get(f"/catalogo/company/{company.name}").status_code for _ in range(65)]
+        self.assertNotIn(429, codes, "el scope 'catalogo' no debería agotarse a los 60")
+
+    def test_sigue_teniendo_un_tope(self):
+        company, _ = make_company(nombre="sectest6", email="sec6@test.com", nit="900994")
+        c = APIClient()
+        codes = [c.get(f"/catalogo/company/{company.name}").status_code for _ in range(605)]
+        self.assertGreater(codes.count(429), 0, "600/min debería cortar antes de 605 intentos")
+
+
 class JWTTest(_CacheAisladaTestCase):
     def test_token_con_firma_rota_es_rechazado(self):
         make_company(nombre="sectest", email="sec@test.com", nit="900999")

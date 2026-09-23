@@ -6,6 +6,7 @@ from rest_framework.generics import ListAPIView,RetrieveAPIView
 from apps.colletion.models import DescuentoProducto, ProductModel, TypeProductModel
 from django.shortcuts import get_object_or_404
 from apps.myStore.models import Company
+from apps.catalogo.api.throttles import CatalogoAnonRateThrottle
 
 
 class CatalogoPagination(PageNumberPagination):
@@ -23,6 +24,7 @@ class CatalogoPagination(PageNumberPagination):
 class CatalogoListView(ListAPIView):
     authentication_classes = []
     permission_classes = []
+    throttle_classes = [CatalogoAnonRateThrottle]
     serializer_class = CatalogoProductListSerializer
     pagination_class = CatalogoPagination
 
@@ -75,6 +77,7 @@ class CatalogoListView(ListAPIView):
 class CatalogoProductRetrieveView(RetrieveAPIView):
     authentication_classes = []
     permission_classes = []
+    throttle_classes = [CatalogoAnonRateThrottle]
     serializer_class = CatalogoProductRetrieveSerializer
 
     def get_object(self):
@@ -101,6 +104,7 @@ class CatalogoProductRetrieveView(RetrieveAPIView):
 class CatalogoTipoProductListView(ListAPIView):
     authentication_classes = []
     permission_classes = []
+    throttle_classes = [CatalogoAnonRateThrottle]
     serializer_class = CatalogoTipoProductListSerializer
     # Lista corta (las categorías de una tienda): se devuelve completa, sin
     # paginar, para que el menú de categorías del catálogo no se corte.

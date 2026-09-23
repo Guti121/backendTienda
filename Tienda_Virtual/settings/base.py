@@ -38,6 +38,9 @@ REST_FRAMEWORK = {
     ),
     'DEFAULT_THROTTLE_RATES': {
         'anon': '60/min',
+        # /catalogo/*: SSR de catalog-web, un solo cubo compartido por todas
+        # las tiendas y todas las visitas (ver CatalogoAnonRateThrottle).
+        'catalogo': '600/min',
     },
     # Sin esto, DRF identifica a quién limitar usando el X-Forwarded-For tal
     # cual lo manda el cliente -> cualquiera evade el throttle mandando un

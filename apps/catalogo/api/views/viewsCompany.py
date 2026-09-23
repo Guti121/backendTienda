@@ -5,6 +5,7 @@ from apps.catalogo.api.serializers.serializersCompany import CatalogoCompanySeri
 from rest_framework.generics import RetrieveAPIView
 from rest_framework.exceptions import ValidationError
 from django.shortcuts import get_object_or_404
+from apps.catalogo.api.throttles import CatalogoAnonRateThrottle
 
 class CompanyDetailView(RetrieveAPIView):
     """
@@ -12,6 +13,7 @@ class CompanyDetailView(RetrieveAPIView):
     """
     authentication_classes = []
     permission_classes = []
+    throttle_classes = [CatalogoAnonRateThrottle]
     serializer_class = CatalogoCompanySerializer
 
     def get_object(self):
