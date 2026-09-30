@@ -137,6 +137,7 @@ class FacturasListView(ListAPIView):
         month = self.request.query_params.get('month')
         year = self.request.query_params.get('year')
         date_str = self.request.query_params.get('date')
+        metodo_pago = self.request.query_params.get('metodo_pago')
 
         # Se filtra con rangos [inicio, fin) en vez de fecha__year/__month/__date:
         # esos lookups sobre DateTimeField con USE_TZ se traducen a CONVERT_TZ y
@@ -147,19 +148,26 @@ class FacturasListView(ListAPIView):
                 inicio, fin = month_bounds(int(year), int(month))
             except (ValueError, TypeError):
                 return queryset.none()
-            return queryset.filter(fecha__gte=inicio, fecha__lt=fin)
-
-        if date_str:
+            queryset = queryset.filter(fecha__gte=inicio, fecha__lt=fin)
+        elif date_str:
             try:
                 d = datetime.strptime(date_str, "%Y-%m-%d").date()
             except (ValueError, TypeError):
                 return queryset.none()
             inicio, fin = day_bounds(d)
-            return queryset.filter(fecha__gte=inicio, fecha__lt=fin)
+            queryset = queryset.filter(fecha__gte=inicio, fecha__lt=fin)
+        else:
+            hoy = timezone.localtime(timezone.now())
+            inicio, fin = month_bounds(hoy.year, hoy.month)
+            queryset = queryset.filter(fecha__gte=inicio, fecha__lt=fin)
 
-        hoy = timezone.localtime(timezone.now())
-        inicio, fin = month_bounds(hoy.year, hoy.month)
-        return queryset.filter(fecha__gte=inicio, fecha__lt=fin)
+        if metodo_pago:
+            claves_validas = {c for c, _ in Factura.METODO_PAGO_CHOICES}
+            if metodo_pago not in claves_validas:
+                return queryset.none()
+            queryset = queryset.filter(metodo_pago=metodo_pago)
+
+        return queryset
 
     def list(self, request, *args, **kwargs):
         queryset = self.get_queryset()

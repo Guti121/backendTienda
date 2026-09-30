@@ -206,6 +206,24 @@ class FacturaMetodoPagoTest(TestCase):
         r = self.client.get(f"/facturas/{factura_id}/")
         self.assertEqual(r.data["metodo_pago"], "transferencia")
 
+    def test_filtro_por_metodo_pago(self):
+        p = make_product(self.company, self.creador, valor="1000", tipo=self.tipo)
+        self._venta([{"producto": p.id, "cantidad": 1}], metodo_pago="efectivo")
+        self._venta([{"producto": p.id, "cantidad": 1}], metodo_pago="datafono")
+        self._venta([{"producto": p.id, "cantidad": 1}], metodo_pago="datafono")
+
+        r = self.client.get("/facturas/", {"metodo_pago": "datafono"})
+        self.assertEqual(r.data["numero_de_facturas"], 2, r.data)
+        self.assertTrue(
+            all(f["metodo_pago"] == "datafono" for f in r.data["facturas"])
+        )
+
+        r = self.client.get("/facturas/", {"metodo_pago": "efectivo"})
+        self.assertEqual(r.data["numero_de_facturas"], 1, r.data)
+
+        r = self.client.get("/facturas/", {"metodo_pago": "bitcoin"})
+        self.assertEqual(r.data["numero_de_facturas"], 0, r.data)
+
 
 class FacturaListTotalesTest(TestCase):
     def setUp(self):
