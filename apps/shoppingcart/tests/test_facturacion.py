@@ -165,6 +165,48 @@ class FacturaConDescuentoTest(TestCase):
         self.assertEqual(r.status_code, 400, r.data)
 
 
+class FacturaMetodoPagoTest(TestCase):
+    def setUp(self):
+        self.company, self.creador = make_company()
+        self.tipo = make_tipo(self.company, self.creador)
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.creador)
+
+    def _venta(self, detalles, metodo_pago=None):
+        payload = {"detalles": detalles}
+        if metodo_pago is not None:
+            payload["metodo_pago"] = metodo_pago
+        return self.client.post("/facturas/create/", payload, format="json")
+
+    def test_metodo_pago_valido_se_guarda(self):
+        p = make_product(self.company, self.creador, valor="1000", tipo=self.tipo)
+        r = self._venta([{"producto": p.id, "cantidad": 1}], metodo_pago="datafono")
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(Factura.objects.get().metodo_pago, "datafono")
+
+    def test_metodo_pago_invalido_devuelve_400(self):
+        p = make_product(self.company, self.creador, valor="1000", tipo=self.tipo)
+        r = self._venta([{"producto": p.id, "cantidad": 1}], metodo_pago="bitcoin")
+        self.assertEqual(r.status_code, 400, r.data)
+
+    def test_metodo_pago_default_es_efectivo(self):
+        p = make_product(self.company, self.creador, valor="1000", tipo=self.tipo)
+        r = self._venta([{"producto": p.id, "cantidad": 1}])
+        self.assertEqual(r.status_code, 201, r.data)
+        self.assertEqual(Factura.objects.get().metodo_pago, "efectivo")
+
+    def test_metodo_pago_aparece_en_list_y_detail(self):
+        p = make_product(self.company, self.creador, valor="1000", tipo=self.tipo)
+        r = self._venta([{"producto": p.id, "cantidad": 1}], metodo_pago="transferencia")
+        factura_id = r.data["factura_id"]
+
+        r = self.client.get("/facturas/")
+        self.assertEqual(r.data["facturas"][0]["metodo_pago"], "transferencia")
+
+        r = self.client.get(f"/facturas/{factura_id}/")
+        self.assertEqual(r.data["metodo_pago"], "transferencia")
+
+
 class FacturaListTotalesTest(TestCase):
     def setUp(self):
         self.company, self.creador = make_company()

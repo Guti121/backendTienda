@@ -24,7 +24,7 @@ class FacturaListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Factura
-        fields = ['id', 'fecha','total_cop','descuento_porcentaje']
+        fields = ['id', 'fecha','total_cop','descuento_porcentaje','metodo_pago']
 
 
     def get_total_cop (self, obj):
@@ -59,7 +59,7 @@ class FacturaSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Factura
-        fields = ['id', 'fecha','tienda_nombre','creado_por_full_name', 'subtotal_cop', 'total_cop', 'descuento_porcentaje', 'detalles']
+        fields = ['id', 'fecha','tienda_nombre','creado_por_full_name', 'subtotal_cop', 'total_cop', 'descuento_porcentaje', 'metodo_pago', 'detalles']
 
 
     def get_subtotal_cop(self, obj):
@@ -93,10 +93,13 @@ class FacturaCreateSerializer(serializers.ModelSerializer):
         max_digits=5, decimal_places=2, required=False, default=Decimal("0"),
         min_value=0, max_value=100,
     )
+    metodo_pago = serializers.ChoiceField(
+        choices=Factura.METODO_PAGO_CHOICES, required=False, default="efectivo",
+    )
 
     class Meta:
         model = Factura
-        fields = ['detalles', 'descuento_porcentaje']  # Los campos a incluir
+        fields = ['detalles', 'descuento_porcentaje', 'metodo_pago']  # Los campos a incluir
 
 
     def create(self, validated_data):

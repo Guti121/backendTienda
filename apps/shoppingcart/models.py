@@ -18,6 +18,16 @@ class Factura(BaseModel):
         max_digits=5, decimal_places=2, default=Decimal("0"),
         validators=[MinValueValidator(0), MaxValueValidator(100)],
     )
+    METODO_PAGO_CHOICES = [
+        ("efectivo", "Efectivo"),
+        ("datafono", "Datáfono"),
+        ("transferencia", "Transferencia"),
+        ("sistecredito", "Sistecredito"),
+        ("adi", "Adi"),
+    ]
+    metodo_pago = models.CharField(
+        max_length=20, choices=METODO_PAGO_CHOICES, default="efectivo",
+    )
 
     def __str__(self):
         return f'Factura {self.id} {self.fecha} '
