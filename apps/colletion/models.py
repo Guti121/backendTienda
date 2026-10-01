@@ -22,9 +22,33 @@ def upload_to_product_image(instance, filename):
     return f"productos/{tienda_nombre}/{nombre_archivo}"
 
 
+class CategoryModel(BaseModel):
+    nombre = models.CharField(max_length=50, blank=False)
+    detalles = models.CharField(max_length=500, blank=True, null=True)
+
+    def save(self, *args, **kwargs):
+        self.nombre = self.nombre.capitalize()
+
+        if not self.tienda:
+            raise ValueError("No se puede guardar una categoría sin una tienda.")
+
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.id} , {self.nombre}"
+
+
 class TypeProductModel(BaseModel):
     tipo_producto=models.CharField(max_length=50,blank=False)
     detalles = models.CharField(max_length=500, blank=True, null=True)
+    # Agrupa varios tipos bajo una categoría (ej. "Ropa de hombre" -> Camisetas,
+    # Pantalones). Opcional: los tipos ya existentes siguen funcionando sin
+    # categoría ("Sin categoría" donde se agrupe/muestre). SET_NULL para que
+    # borrar la categoría no borre los tipos que agrupa.
+    categoria = models.ForeignKey(
+        "colletion.CategoryModel", related_name="tipos",
+        null=True, blank=True, on_delete=models.SET_NULL,
+    )
 
 
     def save(self, *args, **kwargs):
@@ -35,7 +59,7 @@ class TypeProductModel(BaseModel):
             raise ValueError("No se puede guardar un producto sin una tienda.")
 
         super().save(*args, **kwargs)
-        
+
     def __str__(self):
         return f"{self.id} , {self.tipo_producto}"
 

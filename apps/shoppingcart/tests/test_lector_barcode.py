@@ -19,7 +19,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from apps.base.models import TipoUsuario
-from apps.base.tests.factories import make_company, make_tipo, make_user, png_file
+from apps.base.tests.factories import make_categoria, make_company, make_tipo, make_user, png_file
 from apps.colletion.models import Bar_codeModel, ProductModel
 from apps.colletion.tasks import generar_codigo_barras_task
 
@@ -77,6 +77,14 @@ class LectorTextoTest(LectorBase):
         self.assertEqual(r.data["id"], p.id)
         self.assertEqual(r.data["nombre"], p.nombre)
         self.assertEqual(r.data["unidades_disponibles"], 10)
+
+    def test_incluye_categoria_del_tipo(self):
+        categoria = make_categoria(self.company, self.creador, "Electronica")
+        tipo_con_cat = make_tipo(self.company, self.creador, "Audio", categoria=categoria)
+        p, cb = self._producto("10009", tipo=tipo_con_cat)
+        r = self.client.post(URL_TXT, {"codigoBarras": cb.code, "cantidad": 1}, format="json")
+        self.assertEqual(r.status_code, 200, r.data)
+        self.assertEqual(r.data["categoria"], "Electronica")
 
     def test_creator_tambien_puede(self):
         _, cb = self._producto("10002")

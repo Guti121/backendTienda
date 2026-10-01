@@ -15,12 +15,15 @@ class CatalogoProductListSerializer(serializers.ModelSerializer):
     tipo_producto = serializers.CharField(
         source='tipo_producto.tipo_producto', read_only=True, default=None
     )
+    categoria = serializers.CharField(
+        source='tipo_producto.categoria.nombre', read_only=True, default=None
+    )
     descuento_porcentaje = serializers.SerializerMethodField()
     valor_con_descuento = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductModel
-        fields = ['id', 'nombre', 'valor', 'image_principal', 'tipo_producto',
+        fields = ['id', 'nombre', 'valor', 'image_principal', 'tipo_producto', 'categoria',
                   'numero_producto', 'creado_en', 'modificado_en',
                   'descuento_porcentaje', 'valor_con_descuento']
 
@@ -39,12 +42,15 @@ class CatalogoProductListSerializer(serializers.ModelSerializer):
 
 class CatalogoProductRetrieveSerializer(serializers.ModelSerializer):
     imagenes = ProductImageSerializer(many=True, read_only=True)
+    categoria = serializers.CharField(
+        source='tipo_producto.categoria.nombre', read_only=True, default=None
+    )
     descuento_porcentaje = serializers.SerializerMethodField()
     valor_con_descuento = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductModel
-        fields = ['id', 'nombre', 'valor', 'imagenes', 'numero_producto', 'detalles', 'tipo_producto','creado_en','modificado_en',
+        fields = ['id', 'nombre', 'valor', 'imagenes', 'numero_producto', 'detalles', 'tipo_producto', 'categoria','creado_en','modificado_en',
                   'descuento_porcentaje', 'valor_con_descuento']
 
     def get_descuento_porcentaje(self, obj):
@@ -65,6 +71,11 @@ class CatalogoProductRetrieveSerializer(serializers.ModelSerializer):
 
 
 class CatalogoTipoProductListSerializer(serializers.ModelSerializer):
+    categoria_id = serializers.IntegerField(read_only=True, default=None)
+    categoria_nombre = serializers.CharField(
+        source='categoria.nombre', read_only=True, default=None
+    )
+
     class Meta:
         model = TypeProductModel
-        fields = ['id','tipo_producto']
+        fields = ['id', 'tipo_producto', 'categoria_id', 'categoria_nombre']

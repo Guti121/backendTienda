@@ -172,12 +172,15 @@ class FacturaCreateSerializer(serializers.ModelSerializer):
 class ProductModelFilterSerializer(serializers.ModelSerializer):
     # Serializador para el producto y su categoría (tipo_producto)
     tipo_producto = serializers.CharField(source='tipo_producto.tipo_producto', read_only=True)
+    categoria = serializers.CharField(
+        source='tipo_producto.categoria.nombre', read_only=True, default=None,
+    )
     descuento_porcentaje = serializers.SerializerMethodField()
     valor_con_descuento = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductModel
-        fields = ['id', 'nombre', 'tipo_producto', 'detalles', 'valor', 'unidades_disponibles',
+        fields = ['id', 'nombre', 'tipo_producto', 'categoria', 'detalles', 'valor', 'unidades_disponibles',
                   'descuento_porcentaje', 'valor_con_descuento']
 
     def _promo_vigente(self, obj):

@@ -7,7 +7,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
 
 from apps.base.models import CustomUser, TipoUsuario, UserProfile
-from apps.colletion.models import DescuentoProducto, ProductModel, TypeProductModel
+from apps.colletion.models import CategoryModel, DescuentoProducto, ProductModel, TypeProductModel
 from apps.myStore.models import Company
 
 # PNG 1x1 válido (los serializers DRF validan que sea una imagen real).
@@ -43,9 +43,15 @@ def make_company(nombre="tiendatest", email="empresa@test.com", nit="900123"):
     return company, creador
 
 
-def make_tipo(company, creador, nombre="General"):
+def make_categoria(company, creador, nombre="General"):
+    return CategoryModel.objects.create(
+        nombre=nombre, tienda=company, creado_por=creador,
+    )
+
+
+def make_tipo(company, creador, nombre="General", categoria=None):
     return TypeProductModel.objects.create(
-        tipo_producto=nombre, tienda=company, creado_por=creador,
+        tipo_producto=nombre, tienda=company, creado_por=creador, categoria=categoria,
     )
 
 

@@ -32,6 +32,7 @@ class CatalogoListView(ListAPIView):
         name_param = self.kwargs.get('name')
         q_param = self.request.query_params.get('q')          # búsqueda por nombre
         tipo_param = self.request.query_params.get('tipo')
+        categoria_param = self.request.query_params.get('categoria')
         orden_param = self.request.query_params.get('orden')  # 'asc' o 'desc'
         fecha_param = self.request.query_params.get('fecha')  # 'asc' o 'desc'
 
@@ -44,7 +45,7 @@ class CatalogoListView(ListAPIView):
         # UnorderedObjectListWarning). Los params 'fecha'/'orden' lo sobreescriben.
         queryset = (ProductModel.objects
                     .filter(disponible=True, publicar=True, tienda=tienda)
-                    .select_related('tipo_producto')
+                    .select_related('tipo_producto', 'tipo_producto__categoria')
                     .prefetch_related('imagenes', DescuentoProducto.prefetch_vigentes())
                     .order_by('-creado_en'))
 
@@ -61,6 +62,14 @@ class CatalogoListView(ListAPIView):
                 queryset = queryset.filter(tipo_producto__id=tipo_param)
             except ValueError:
                 raise ValidationError(detail="El parámetro 'tipo' debe ser numérico.")
+
+        # Filtro por categoría (agrupa varios tipos)
+        if categoria_param:
+            try:
+                categoria_param = int(categoria_param)
+                queryset = queryset.filter(tipo_producto__categoria_id=categoria_param)
+            except ValueError:
+                raise ValidationError(detail="El parámetro 'categoria' debe ser numérico.")
 
         # Ordenamiento (sobreescribe el orden por defecto). Siempre con 'id' de
         # desempate para que la paginación sea determinista.
@@ -89,7 +98,7 @@ class CatalogoProductRetrieveView(RetrieveAPIView):
 
         tienda = get_object_or_404(Company, name__iexact=name_param)
         product = get_object_or_404(
-            ProductModel.objects.select_related('tipo_producto')
+            ProductModel.objects.select_related('tipo_producto', 'tipo_producto__categoria')
                 .prefetch_related('imagenes', DescuentoProducto.prefetch_vigentes()),
             id=product_id, tienda=tienda, disponible=True, publicar=True,
         )
@@ -117,7 +126,7 @@ class CatalogoTipoProductListView(ListAPIView):
             raise ValidationError(detail="El parámetro 'name' es obligatorio.")
 
         tienda = get_object_or_404(Company, name__iexact=name_param)
-        queryset = TypeProductModel.objects.filter(tienda=tienda)
+        queryset = TypeProductModel.objects.filter(tienda=tienda).select_related('categoria')
         if not queryset.exists():
             raise ValidationError(detail="No se encontraron tipos de productos para esta tienda.")
         return queryset

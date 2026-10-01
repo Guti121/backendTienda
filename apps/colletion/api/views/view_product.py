@@ -21,7 +21,7 @@ def _productos_de(company):
     serializers ya cargadas (evita N+1 por 'tipo_producto' e 'imagenes')."""
     return (ProductModel.objects
             .filter(tienda=company)
-            .select_related('tipo_producto', 'producto')
+            .select_related('tipo_producto', 'tipo_producto__categoria', 'producto')
             .prefetch_related('imagenes', DescuentoProducto.prefetch_vigentes())
             .order_by('id'))  # orden estable por defecto (paginación determinista)
 
@@ -38,6 +38,18 @@ def _busqueda_producto_q(query, incluir_detalles=False):
     except (InvalidOperation, TypeError):
         pass
     return cond
+
+
+def _filtrar_por_categoria(queryset, categoria_param):
+    """Filtra `queryset` por `tipo_producto__categoria_id` si viene el query
+    param; `categoria_param` no numérico -> sin resultados (no 500)."""
+    if not categoria_param:
+        return queryset
+    try:
+        categoria_id = int(categoria_param)
+    except (TypeError, ValueError):
+        return queryset.none()
+    return queryset.filter(tipo_producto__categoria_id=categoria_id)
 
 
 ##Podemos listar los productos en general sin ningun filtro
@@ -88,6 +100,8 @@ class ProductFilterAdminAPIView(generics.ListAPIView):
         if query:
             queryset = queryset.filter(_busqueda_producto_q(query))
 
+        queryset = _filtrar_por_categoria(queryset, self.request.GET.get('categoria'))
+
         ##filtrar por orden
         filter = self.request.GET.get('order', None)
         if filter == "0":  # Orden ascendente
@@ -129,6 +143,7 @@ class ProductListFilterAPIView( generics.ListAPIView):
         query = self.request.GET.get('q', None)
         if query:
             queryset = queryset.filter(_busqueda_producto_q(query, incluir_detalles=True))
+        queryset = _filtrar_por_categoria(queryset, self.request.GET.get('categoria'))
         return queryset[:10]
 
     def list(self, request, *args, **kwargs):

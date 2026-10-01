@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
-from apps.base.tests.factories import make_company, make_descuento, make_product, make_tipo, png_file
+from apps.base.tests.factories import make_categoria, make_company, make_descuento, make_product, make_tipo, png_file
 from apps.colletion.models import ProductImage, ProductModel
 
 
@@ -78,7 +78,10 @@ class ProductCreateValidationTest(TestCase):
 class ProductListPerfTest(TestCase):
     def setUp(self):
         self.company, self.creador = make_company()
-        self.tipo = make_tipo(self.company, self.creador)
+        # Con categoría asignada: si `_productos_de()` no hace select_related
+        # de 'tipo_producto__categoria', este test de N+1 lo detecta.
+        self.categoria = make_categoria(self.company, self.creador, "Electronica")
+        self.tipo = make_tipo(self.company, self.creador, categoria=self.categoria)
         self.client = APIClient()
         self.client.force_authenticate(user=self.creador)
 
@@ -108,6 +111,16 @@ class ProductListPerfTest(TestCase):
             len(q2.captured_queries), len(q6.captured_queries),
             f"N+1: 2 prod -> {len(q2.captured_queries)} queries, 6 prod -> {len(q6.captured_queries)}",
         )
+
+    def test_categoria_aparece_en_list_y_detail(self):
+        self._crear(1)
+        p = ProductModel.objects.get()
+
+        r = self.client.get("/product/")
+        self.assertEqual(r.data["results"][0]["categoria"], "Electronica", r.data)
+
+        r = self.client.get(f"/productDetail/{p.id}/")
+        self.assertEqual(r.data["categoria"], "Electronica", r.data)
 
     def test_busqueda_por_valor_numerico_y_texto(self):
         self._crear(3)  # valores 1000, 1001, 1002

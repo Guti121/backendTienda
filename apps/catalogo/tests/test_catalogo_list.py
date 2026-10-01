@@ -7,7 +7,7 @@ categoría (?tipo=) y orden (?orden/?fecha); aquí se cubre el nuevo ?q=.
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from apps.base.tests.factories import make_company, make_tipo, make_product
+from apps.base.tests.factories import make_categoria, make_company, make_tipo, make_product
 from apps.colletion.models import ProductModel
 
 
@@ -130,3 +130,51 @@ class CatalogoPaginacionTest(TestCase):
         self.assertEqual(
             len(self.client.get(self.url, {"page_size": 100}).data["results"]), 35
         )
+
+
+class CatalogoCategoriaTest(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.company, self.creador = make_company(nombre="tiendacat")
+        self.cat_ropa = make_categoria(self.company, self.creador, "Ropa")
+        self.tipo_camisetas = make_tipo(
+            self.company, self.creador, nombre="Camisetas", categoria=self.cat_ropa,
+        )
+        self.tipo_calzado = make_tipo(self.company, self.creador, nombre="Calzado")  # sin categoría
+
+        self.camiseta = make_product(
+            self.company, self.creador, nombre="Camiseta Azul", tipo=self.tipo_camisetas,
+        )
+        self.zapato = make_product(
+            self.company, self.creador, nombre="Zapato Negro", tipo=self.tipo_calzado,
+        )
+        _publicar(self.camiseta, self.zapato)
+
+    def test_tipo_producto_list_incluye_categoria(self):
+        r = self.client.get(f"/catalogo/tipo-producto/{self.company.name}")
+        self.assertEqual(r.status_code, 200, r.data)
+        by_name = {t["tipo_producto"]: t for t in r.data}
+        self.assertEqual(by_name["Camisetas"]["categoria_id"], self.cat_ropa.id)
+        self.assertEqual(by_name["Camisetas"]["categoria_nombre"], "Ropa")
+        self.assertIsNone(by_name["Calzado"]["categoria_id"])
+        self.assertIsNone(by_name["Calzado"]["categoria_nombre"])
+
+    def test_filtro_por_categoria(self):
+        url = f"/catalogo/list/{self.company.name}"
+        r = self.client.get(url, {"categoria": self.cat_ropa.id})
+        self.assertEqual(r.status_code, 200, r.data)
+        nombres = [p["nombre"] for p in r.data["results"]]
+        self.assertEqual(nombres, ["Camiseta Azul"])
+
+    def test_categoria_no_numerica_400(self):
+        url = f"/catalogo/list/{self.company.name}"
+        r = self.client.get(url, {"categoria": "abc"})
+        self.assertEqual(r.status_code, 400, r.data)
+
+    def test_categoria_aparece_en_list_y_detail(self):
+        url = f"/catalogo/list/{self.company.name}"
+        r = self.client.get(url, {"q": "Camiseta"})
+        self.assertEqual(r.data["results"][0]["categoria"], "Ropa")
+
+        r = self.client.get(f"/catalogo/product/{self.company.name}/{self.camiseta.id}")
+        self.assertEqual(r.data["categoria"], "Ropa")

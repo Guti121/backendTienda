@@ -3,6 +3,7 @@ from apps.colletion.api.views.view_config_price import ConfigProductoRetrieveAPI
 from apps.colletion.api.views.view_descuento import DescuentoProductoCreateView, DescuentoProductoDestroyView, DescuentoProductoListView, DescuentoProductoUpdateView
 from apps.colletion.api.views.view_product import ProductCreateView,ProductDestroyAPIView,ListProductAPIView, ProductFilterAdminAPIView,ProductListFilterAPIView,ProductRetrieveAPIView, ProductUpdateApiView
 from apps.colletion.api.views.view_typeproduct import TypeProductCreateView,TypeProductDestroyAPIView, TypeProductFilterAdminAPIView, TypeProductListView
+from apps.colletion.api.views.view_category import CategoryCreateView, CategoryDestroyAPIView, CategoryFilterAdminAPIView, CategoryListView, CategoryUpdateAPIView
 
 urlpatterns=[
     
@@ -18,6 +19,12 @@ urlpatterns=[
     path('destroytypeProduct/<int:pk>/', TypeProductDestroyAPIView.as_view(), name='Destroy type product'),
     path('listType/', TypeProductListView.as_view(), name='list type product'),
     path('typeProductFilter/', TypeProductFilterAdminAPIView.as_view(), name='filter Type Product Admin'),
+
+    path('createcategory/', CategoryCreateView.as_view(), name='create category'),
+    path('destroycategory/<int:pk>/', CategoryDestroyAPIView.as_view(), name='destroy category'),
+    path('listCategory/', CategoryListView.as_view(), name='list category'),
+    path('categoryFilter/', CategoryFilterAdminAPIView.as_view(), name='filter category admin'),
+    path('categoryUpdate/<int:pk>/', CategoryUpdateAPIView.as_view(), name='update category'),
 
     path('config/',CreacionParametrosAPIView.as_view(), name='config params'),
     path('config/destroy/', EliminacionParametrosAPIView.as_view(), name='destroy_config_params'),

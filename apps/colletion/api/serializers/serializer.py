@@ -4,7 +4,7 @@ from django.utils import timezone
 from Tienda_Virtual.globalFunctions import company_owner
 from rest_framework import serializers
 from apps.base.api.fields import PesosField, redondear_pesos
-from ...models import Bar_codeModel, ProductImage, ProductModel,TypeProductModel
+from ...models import Bar_codeModel, CategoryModel, ProductImage, ProductModel,TypeProductModel
 
 
 def _descuento_vigente_de(obj):
@@ -27,6 +27,11 @@ def _valor_con_descuento_de(obj):
     if not pct:
         return obj.valor
     return redondear_pesos(obj.valor * (1 - pct / 100))
+
+
+def _categoria_nombre_de(tipo_producto):
+    """Nombre de la categoría del tipo de producto de `obj` (o `None`)."""
+    return tipo_producto.categoria.nombre if tipo_producto and tipo_producto.categoria_id else None
 
 
 def _abs_media(serializer, url):
@@ -131,10 +136,11 @@ class ProductModelListFilterSerializer(serializers.ModelSerializer):
     descuento_porcentaje = serializers.SerializerMethodField()
     valor_con_descuento = serializers.SerializerMethodField()
     codigo_barras = serializers.SerializerMethodField()
+    categoria = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductModel
-        fields = ['id','imagen_principal','nombre','tipo_producto','detalles','valor','unidades_disponibles','numero_producto','descuento_porcentaje','valor_con_descuento','codigo_barras','publicar']
+        fields = ['id','imagen_principal','nombre','tipo_producto','categoria','detalles','valor','unidades_disponibles','numero_producto','descuento_porcentaje','valor_con_descuento','codigo_barras','publicar']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -165,17 +171,21 @@ class ProductModelListFilterSerializer(serializers.ModelSerializer):
         except Bar_codeModel.DoesNotExist:
             return None
 
+    def get_categoria(self, obj):
+        return _categoria_nombre_de(obj.tipo_producto)
+
 
 ##serializador para retrieve product
 class ProductModelRetrieveProductSerializer(serializers.ModelSerializer):
     imagenes = ProductImageSerializer(many=True, read_only=True)
     descuento_porcentaje = serializers.SerializerMethodField()
     valor_con_descuento = serializers.SerializerMethodField()
+    categoria = serializers.SerializerMethodField()
 
 
     class Meta:
         model = ProductModel
-        fields = ['id','imagenes','nombre','tipo_producto','detalles','valor','unidades_disponibles','numero_producto','descuento_porcentaje','valor_con_descuento']
+        fields = ['id','imagenes','nombre','tipo_producto','categoria','detalles','valor','unidades_disponibles','numero_producto','descuento_porcentaje','valor_con_descuento']
 
     def to_representation(self, instance):
         representation = super().to_representation(instance)
@@ -192,14 +202,18 @@ class ProductModelRetrieveProductSerializer(serializers.ModelSerializer):
     def get_valor_con_descuento(self, obj):
         return _valor_con_descuento_de(obj)
 
+    def get_categoria(self, obj):
+        return _categoria_nombre_de(obj.tipo_producto)
+
 class ProductModelRetrieveProductCreatorSerializer(serializers.ModelSerializer):
     imagenes = ProductImageSerializer(many=True, read_only=True)
     descuento_porcentaje = serializers.SerializerMethodField()
     valor_con_descuento = serializers.SerializerMethodField()
+    categoria = serializers.SerializerMethodField()
 
     class Meta:
         model = ProductModel
-        fields = ['id','nombre','imagenes','tipo_producto','detalles','valor','valor_mayor','valor_costos_fijos','unidades_disponibles','numero_producto','publicar','descuento_porcentaje','valor_con_descuento']
+        fields = ['id','nombre','imagenes','tipo_producto','categoria','detalles','valor','valor_mayor','valor_costos_fijos','unidades_disponibles','numero_producto','publicar','descuento_porcentaje','valor_con_descuento']
 
     def get_descuento_porcentaje(self, obj):
         return _descuento_porcentaje_de(obj)
@@ -210,14 +224,17 @@ class ProductModelRetrieveProductCreatorSerializer(serializers.ModelSerializer):
     def get_imagen_principal(self, obj):
         imagen = obj.imagen_principal()
         return _abs_media(self, imagen.imagen.url) if imagen else None
-    
+
+    def get_categoria(self, obj):
+        return _categoria_nombre_de(obj.tipo_producto)
+
     def to_representation(self, instance):
         representation = super().to_representation(instance)
-        
+
         # Aquí cambiamos el campo 'categoria' de ID a 'nombre'
-        category_name = instance.tipo_producto.tipo_producto  
+        category_name = instance.tipo_producto.tipo_producto
         representation['tipo_producto'] = category_name
-        
+
         return representation
     
 class ProductModelDestroySerializer(serializers.ModelSerializer):
@@ -260,18 +277,51 @@ class ProductModelUpdateProductSerializer(serializers.ModelSerializer):
 
 
 class TypeProductModelSerializer(serializers.ModelSerializer):
+    categoria = serializers.PrimaryKeyRelatedField(
+        queryset=CategoryModel.objects.all(), required=False, allow_null=True,
+    )
+    categoria_nombre = serializers.CharField(
+        source='categoria.nombre', read_only=True, default=None,
+    )
+
     class Meta:
         model = TypeProductModel
-        fields = ['id', 'tipo_producto', 'detalles']
-        read_only_fields = ['id']
+        fields = ['id', 'tipo_producto', 'detalles', 'categoria', 'categoria_nombre']
+        read_only_fields = ['id', 'categoria_nombre']
 
     def validate(self, data):
         # Realiza la validación de los campos requeridos
         if not data.get('tipo_producto'):
             raise serializers.ValidationError("El campo 'Tipo de producto' es requerido.")
-        
+
+        categoria = data.get('categoria')
+        if categoria is not None:
+            request = self.context.get('request')
+            company = company_owner(request.user) if request else None
+            if company and categoria.tienda_id != company.id:
+                raise serializers.ValidationError(
+                    {"categoria": "Esta categoría no pertenece a tu tienda."}
+                )
+
         return data
-    
+
+
+class CategoryModelSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CategoryModel
+        fields = ['id', 'nombre', 'detalles']
+        read_only_fields = ['id']
+
+    def validate(self, data):
+        if not data.get('nombre') and self.instance is None:
+            raise serializers.ValidationError("El campo 'nombre' es requerido.")
+        return data
+
+
+class CategoryModelDestroySerializer(serializers.ModelSerializer):
+    class Meta:
+        model = CategoryModel
+        fields = 'id'
 
 
 class TypeProductModelDestroySerializer(serializers.ModelSerializer):
