@@ -113,3 +113,24 @@ class TypeProductoConCategoriaTest(TestCase):
         r = self.client.get("/listType/")
         self.assertEqual(r.status_code, 200, r.data)
         self.assertEqual(r.data["results"][0]["categoria_nombre"], "Ropa de hombre")
+
+    def test_filtro_de_tipos_por_categoria(self):
+        otra_categoria = make_categoria(self.company, self.creador, "Ropa de mujer")
+        make_tipo(self.company, self.creador, "Camisetas", categoria=self.categoria)
+        make_tipo(self.company, self.creador, "Pantalones", categoria=self.categoria)
+        make_tipo(self.company, self.creador, "Blusas", categoria=otra_categoria)
+        make_tipo(self.company, self.creador, "Suelto")  # sin categoría
+
+        r = self.client.get("/typeProductFilter/", {"categoria": self.categoria.id})
+        self.assertEqual(r.status_code, 200, r.data)
+        nombres = {t["tipo_producto"] for t in r.data["results"]}
+        self.assertEqual(nombres, {"Camisetas", "Pantalones"})
+
+        r = self.client.get("/listType/", {"categoria": self.categoria.id})
+        self.assertEqual(r.status_code, 200, r.data)
+        nombres = {t["tipo_producto"] for t in r.data["results"]}
+        self.assertEqual(nombres, {"Camisetas", "Pantalones"})
+
+        r = self.client.get("/typeProductFilter/", {"categoria": "abc"})
+        self.assertEqual(r.status_code, 200, r.data)  # paginado: queryset.none() -> resultados vacíos
+        self.assertEqual(r.data["results"], [])

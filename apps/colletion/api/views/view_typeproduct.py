@@ -16,20 +16,34 @@ from django.db.models import Q
 from django.db.models.functions import Lower
 from rest_framework.exceptions import PermissionDenied
 
+def _filtrar_tipos_por_categoria(queryset, categoria_param):
+    """Filtra `queryset` de TypeProductModel por `categoria_id` si viene el
+    query param; `categoria_param` no numérico -> sin resultados (no 500)."""
+    if not categoria_param:
+        return queryset
+    try:
+        categoria_id = int(categoria_param)
+    except (TypeError, ValueError):
+        return queryset.none()
+    return queryset.filter(categoria_id=categoria_id)
+
+
 class TypeProductListView(ListAPIView):
     authentication_classes = [JWTAuthentication]
     permission_classes = [IsAuthenticated,IsAdminOrCreator]
     serializer_class=TypeProductModelSerializer
-    
+
     def get_queryset(self):
         company = company_owner(self.request.user)
         queryset = TypeProductModel.objects.filter(tienda=company).order_by(Lower('tipo_producto'))
-       
-        
+
+
         query = self.request.GET.get('q', None)
         if query:
             queryset = queryset.filter(tipo_producto__icontains=query).order_by(Lower('tipo_producto'))
-            
+
+        queryset = _filtrar_tipos_por_categoria(queryset, self.request.GET.get('categoria'))
+
         return queryset
 
 class TypeProductFilterAdminAPIView(generics.ListAPIView):
@@ -40,12 +54,14 @@ class TypeProductFilterAdminAPIView(generics.ListAPIView):
     def get_queryset(self):
         company = company_owner(self.request.user)
         queryset = TypeProductModel.objects.filter(tienda=company).order_by(Lower('tipo_producto'))
-       
-        
+
+
         query = self.request.GET.get('q', None)
         if query:
             queryset = queryset.filter(tipo_producto__icontains=query).order_by(Lower('tipo_producto'))
-            
+
+        queryset = _filtrar_tipos_por_categoria(queryset, self.request.GET.get('categoria'))
+
         return queryset
 
     def list(self, request, *args, **kwargs):
