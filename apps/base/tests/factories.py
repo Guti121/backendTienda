@@ -9,6 +9,7 @@ from django.utils import timezone
 from apps.base.models import CustomUser, TipoUsuario, UserProfile
 from apps.colletion.models import CategoryModel, DescuentoProducto, ProductModel, TypeProductModel
 from apps.myStore.models import Company
+from apps.shoppingcart.models import CajaModel
 
 # PNG 1x1 válido (los serializers DRF validan que sea una imagen real).
 _PNG_1x1 = base64.b64decode(
@@ -62,6 +63,13 @@ def make_product(company, creador, nombre="Producto A", stock=10, valor="1000",
         nombre=nombre, tipo_producto=tipo, detalles="x",
         valor_mayor=Decimal(valor_mayor), valor=Decimal(valor),
         unidades_disponibles=stock, tienda=company, creado_por=creador,
+    )
+
+
+def make_caja(company, creador, monto_apertura="0"):
+    """Abre una caja (facturar ahora requiere una abierta)."""
+    return CajaModel.objects.create(
+        monto_apertura=Decimal(monto_apertura), tienda=company, creado_por=creador,
     )
 
 

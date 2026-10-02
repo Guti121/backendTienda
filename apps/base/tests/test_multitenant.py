@@ -7,7 +7,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from apps.base.models import TipoUsuario
-from apps.base.tests.factories import make_company, make_product, make_tipo, make_user
+from apps.base.tests.factories import make_caja, make_company, make_product, make_tipo, make_user
 from apps.colletion.models import (Bar_codeModel, Config_ProductModel, ProductModel,
                                    TypeProductModel)
 from apps.shoppingcart.models import Factura, FacturaDetalle
@@ -19,6 +19,7 @@ class MultiTenantIsolationTest(TestCase):
         self.A, self.ana = make_company("tiendaa", "a@t.com", "900A")
         self.tpA = make_tipo(self.A, self.ana, "TipoA")
         self.pA = make_product(self.A, self.ana, "ProdA", stock=10, tipo=self.tpA)
+        make_caja(self.A, self.ana)
         # Empresa B
         self.B, self.beto = make_company("tiendab", "b@t.com", "900B")
         self.tpB = make_tipo(self.B, self.beto, "TipoB")

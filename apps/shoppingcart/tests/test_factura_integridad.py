@@ -8,7 +8,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from apps.base.models import TipoUsuario
-from apps.base.tests.factories import make_company, make_descuento, make_product, make_tipo, make_user
+from apps.base.tests.factories import make_caja, make_company, make_descuento, make_product, make_tipo, make_user
 from apps.colletion.models import ProductModel
 from apps.shoppingcart.models import Factura, FacturaDetalle
 
@@ -17,6 +17,7 @@ class BorrarFacturaTest(TestCase):
     def setUp(self):
         self.company, self.creador = make_company()
         self.tipo = make_tipo(self.company, self.creador)
+        make_caja(self.company, self.creador)
         self.worker = make_user("wrk", tipo=TipoUsuario.WORKER, company=self.company)
         self.wc = APIClient(); self.wc.force_authenticate(self.worker)   # crea
         self.cc = APIClient(); self.cc.force_authenticate(self.creador)  # borra
@@ -101,6 +102,7 @@ class SnapshotInmutableTest(TestCase):
         from apps.base.tests.factories import make_company as _mc
         company, creador = _mc(nombre="tiendasnapshot", email="snap@test.com", nit="900555")
         tipo = make_tipo(company, creador)
+        make_caja(company, creador)
         p = make_product(company, creador, "PromoP", stock=10, valor="1000", tipo=tipo)
         promo = make_descuento(p, creador, porcentaje="20")
 

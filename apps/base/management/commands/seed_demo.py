@@ -16,7 +16,7 @@ from apps.colletion.models import (
     Bar_codeModel, Config_ProductModel, ProductModel, TypeProductModel,
 )
 from apps.myStore.models import Company
-from apps.shoppingcart.models import Factura, FacturaDetalle
+from apps.shoppingcart.models import CajaModel, Factura, FacturaDetalle
 
 PWD = "demo12345"
 # PNG 1x1 para el logo (Company.url_logo no admite blank).
@@ -109,6 +109,10 @@ class Command(BaseCommand):
             self._factura(electro, carlos, [(creados["Cargador USB-C"], 5),
                                             (creados["Teclado Mecanico"], 1)])
 
+        # Caja abierta: facturar ahora requiere un turno abierto; sin esto la
+        # demo no deja probar "Facturar" recién seedeada.
+        self._abrir_caja_si_falta(electro, ana)
+
         # --- Empresa B: modatienda (para test de aislamiento) ------------
         beto = _user("beto@demo.local", "Beto", "Nino")
         moda, _ = Company.objects.get_or_create(
@@ -124,6 +128,7 @@ class Command(BaseCommand):
         t_ropa = self._tipo(moda, beto, "Ropa")
         self._producto(moda, beto, "Camiseta Basica", t_ropa, "40000", "22000", "2000", 50, True)
         self._producto(moda, beto, "Jean Slim", t_ropa, "120000", "70000", "6000", 15, True)
+        self._abrir_caja_si_falta(moda, beto)
 
         self.stdout.write(self.style.SUCCESS(
             f"Demo OK. Empresas: {Company.objects.count()} | "
@@ -155,6 +160,10 @@ class Command(BaseCommand):
                 tienda=company, creado_por=user,
             )
         return p
+
+    def _abrir_caja_si_falta(self, company, user):
+        if not CajaModel.objects.filter(tienda=company, cerrada_en__isnull=True).exists():
+            CajaModel.objects.create(monto_apertura=Decimal("50000"), tienda=company, creado_por=user)
 
     def _factura(self, company, user, lineas):
         with transaction.atomic():

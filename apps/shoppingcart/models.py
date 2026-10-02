@@ -1,9 +1,46 @@
 from decimal import Decimal
 
+from django.conf import settings
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from apps.myStore.models import BaseModel
 from apps.colletion.models import ProductModel
+
+
+class CajaModel(BaseModel):
+    """Turno de caja: apertura/cierre de efectivo por tienda. `creado_en` (de
+    BaseModel) es la apertura; `creado_por`, quien la abrió."""
+    monto_apertura = models.DecimalField(max_digits=10, decimal_places=0)
+    cerrada_en = models.DateTimeField(null=True, blank=True)
+    monto_cierre_declarado = models.DecimalField(max_digits=10, decimal_places=0, null=True, blank=True)
+    monto_cierre_esperado = models.DecimalField(max_digits=10, decimal_places=0, null=True, blank=True)
+    diferencia = models.DecimalField(max_digits=10, decimal_places=0, null=True, blank=True)
+    cerrada_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True,
+        on_delete=models.SET_NULL, related_name="cajas_cerradas",
+    )
+    nota_cierre = models.CharField(max_length=255, blank=True, null=True)
+
+    class Meta:
+        indexes = [models.Index(fields=['tienda', 'cerrada_en'])]
+        # Nota: MySQL no soporta UniqueConstraint con `condition` (lo ignora
+        # con un warning W036), así que "solo una caja abierta por tienda" se
+        # garantiza a nivel de aplicación (select_for_update en CajaAbrirView),
+        # no con un constraint de BD.
+
+    def __str__(self):
+        return f"Caja {self.id} ({self.tienda_id})"
+
+
+class MovimientoCajaModel(BaseModel):
+    TIPO_CHOICES = [("ingreso", "Ingreso"), ("retiro", "Retiro")]
+    caja = models.ForeignKey("shoppingcart.CajaModel", related_name="movimientos", on_delete=models.CASCADE)
+    tipo = models.CharField(max_length=10, choices=TIPO_CHOICES)
+    monto = models.DecimalField(max_digits=10, decimal_places=0)
+    motivo = models.CharField(max_length=255)
+
+    def __str__(self):
+        return f"{self.tipo} {self.monto} (caja {self.caja_id})"
 
 
 # Create your models here.
@@ -27,6 +64,13 @@ class Factura(BaseModel):
     ]
     metodo_pago = models.CharField(
         max_length=20, choices=METODO_PAGO_CHOICES, default="efectivo",
+    )
+    # Caja (turno) en la que se registró la venta — la asigna el servidor al
+    # facturar (ver FacturasCreateView.perform_create), nunca el cliente.
+    # Nullable: facturas de antes de esta feature no tienen caja asociada.
+    caja = models.ForeignKey(
+        "shoppingcart.CajaModel", related_name="facturas",
+        null=True, blank=True, on_delete=models.PROTECT,
     )
 
     def __str__(self):

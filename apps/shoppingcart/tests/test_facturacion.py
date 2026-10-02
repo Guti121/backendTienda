@@ -3,7 +3,7 @@ from decimal import Decimal
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from apps.base.tests.factories import make_company, make_descuento, make_product, make_tipo
+from apps.base.tests.factories import make_caja, make_company, make_descuento, make_product, make_tipo
 from apps.colletion.models import ProductModel
 from apps.shoppingcart.models import Factura, FacturaDetalle
 
@@ -12,6 +12,7 @@ class FacturaCreateTest(TestCase):
     def setUp(self):
         self.company, self.creador = make_company()
         self.tipo = make_tipo(self.company, self.creador)
+        make_caja(self.company, self.creador)
         self.client = APIClient()
         self.client.force_authenticate(user=self.creador)
 
@@ -90,6 +91,7 @@ class FacturaConDescuentoTest(TestCase):
     def setUp(self):
         self.company, self.creador = make_company()
         self.tipo = make_tipo(self.company, self.creador)
+        make_caja(self.company, self.creador)
         self.client = APIClient()
         self.client.force_authenticate(user=self.creador)
 
@@ -169,6 +171,7 @@ class FacturaMetodoPagoTest(TestCase):
     def setUp(self):
         self.company, self.creador = make_company()
         self.tipo = make_tipo(self.company, self.creador)
+        make_caja(self.company, self.creador)
         self.client = APIClient()
         self.client.force_authenticate(user=self.creador)
 
@@ -228,6 +231,7 @@ class FacturaMetodoPagoTest(TestCase):
 class FacturaListTotalesTest(TestCase):
     def setUp(self):
         self.company, self.creador = make_company()
+        make_caja(self.company, self.creador)
         self.client = APIClient()
         self.client.force_authenticate(user=self.creador)
 

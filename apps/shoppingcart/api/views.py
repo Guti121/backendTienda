@@ -7,7 +7,7 @@ from rest_framework.generics import CreateAPIView, DestroyAPIView,ListAPIView,Re
 from rest_framework import serializers  
 from Tienda_Virtual.globalFunctions import company_owner
 from Tienda_Virtual.dateutils import day_bounds, month_bounds
-from apps.shoppingcart.models import Factura, FacturaDetalle
+from apps.shoppingcart.models import CajaModel, Factura, FacturaDetalle
 from apps.base.api.user.viewsPermissions import IsAdminOrCreator, IsWorkerOrCreator, isCreator
 from apps.colletion.models import ProductModel
 from .serializers.serializers import FacturaListSerializer, FacturaSerializer,FacturaCreateSerializer
@@ -39,6 +39,12 @@ class FacturasCreateView(CreateAPIView):
     def perform_create(self, serializer):
 
         company = company_owner(self.request.user)
+
+        caja_abierta = CajaModel.objects.filter(tienda=company, cerrada_en__isnull=True).first()
+        if not caja_abierta:
+            raise serializers.ValidationError(
+                {"error": "No hay una caja abierta. Abrí caja antes de facturar."}
+            )
 
         detalles = serializer.validated_data.get('detalles')
         if not detalles:  # Si no envían detalles
@@ -88,7 +94,7 @@ class FacturasCreateView(CreateAPIView):
                 productos.values(), ['unidades_disponibles', 'disponible']
             )
 
-            serializer.save(creado_por=self.request.user, tienda=company)
+            serializer.save(creado_por=self.request.user, tienda=company, caja=caja_abierta)
             
     def post(self, request, *args, **kwargs):
             serializer = self.get_serializer(data=request.data)
